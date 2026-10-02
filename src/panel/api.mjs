@@ -3,6 +3,7 @@
  * 只做 HTTP 编排；各通道的业务组装在 ./trae-status.mjs 等模块里。
  */
 import { createTraeStatus } from './trae-status.mjs';
+import { createWorkBuddyStatus } from './workbuddy-status.mjs';
 
 /** 安全 JSON 响应 */
 function json(res, status, body) {
@@ -11,6 +12,18 @@ function json(res, status, body) {
     res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) });
   }
   res.end(payload);
+}
+
+/** 读请求体，1MB 上限 */
+async function readRequestBody(req, limit = 1024 * 1024) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error('request body too large');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** 通道健康度文档：不含任何凭据字段 */
@@ -31,6 +44,7 @@ export function healthDocument(providers) {
 export function createPanelApi(deps) {
   const routes = new Map();
   const traeStatus = createTraeStatus({ providers: deps.providers });
+  const wbStatus = createWorkBuddyStatus({ providers: deps.providers });
   routes.set('GET /panel/api/health', (req, res) => json(res, 200, healthDocument(deps.providers())));
   routes.set('GET /panel/api/trae', async (req, res) => {
     const out = {};
@@ -44,6 +58,25 @@ export function createPanelApi(deps) {
     const region = url.searchParams.get('region') ?? 'cn';
     const out = await traeStatus.refresh(region);
     json(res, 200, out);
+  });
+  routes.set('GET /panel/api/workbuddy', async (req, res) => {
+    const out = {};
+    for (const variant of wbStatus.variants()) {
+      out[variant] = await wbStatus.document(variant);
+    }
+    json(res, 200, { variants: out });
+  });
+  routes.set('POST /panel/api/workbuddy/control', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const variant = url.searchParams.get('variant') ?? 'cn';
+    const raw = await readRequestBody(req);
+    let action;
+    try {
+      action = JSON.parse(raw || '{}');
+    } catch {
+      return json(res, 400, { error: { message: 'invalid JSON body' } });
+    }
+    json(res, 200, await wbStatus.control(variant, action));
   });
 
   return {
