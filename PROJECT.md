@@ -172,8 +172,6 @@ node src/server.mjs
 
 `panel/dist` 已构建好，日常启动**不需要**重新构建前端，面板由网关自己托管在 http://127.0.0.1:8790/panel。
 
-或双击 `start.cmd`。
-
 ### 改了前端（`panel/`）之后
 
 只想重建产物、不起 dev server：
