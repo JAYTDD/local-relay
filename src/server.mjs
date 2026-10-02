@@ -82,6 +82,10 @@ function listModels() {
         object: 'model',
         created: 0,
         owned_by: p.def.label,
+        // 显示名。ZCode 之类的客户端在模型选择器里显示它，但**调用时必须用 id**。
+        // 上游的 id 往往是内部代号（Qoder 的 qmodel_latest、WorkBuddy 的 hy3），
+        // 没有这个字段就只能对着代号猜。缺 name 时回落到 id。
+        name: typeof m.name === 'string' && m.name !== '' ? m.name : m.id,
         ...(m.contextWindow === undefined ? {} : { context_window: m.contextWindow }),
         ...(m.maxTokens === undefined ? {} : { max_tokens: m.maxTokens }),
         ...(m.reasoningSupported === undefined ? {} : { reasoning: m.reasoningSupported }),

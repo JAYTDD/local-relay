@@ -110,14 +110,31 @@ probe.cn.json / probe.global.json              # 推理探针结果
 
 ## 模型命名
 
-统一用 `{通道}/{模型}` 前缀，避免不同上游同名冲突：
+格式：`{通道}/{模型ID}`
 
 | 前缀 | 通道 | 实测状态 |
 |---|---|---|
-| `trae/` | Trae 国内版 | ✅ 对话 + 工具调用 |
+| `trae/` | Trae 国内版 | ✅ 对话 |
 | `traeg/` | Trae 国际版 | 需登录国际版客户端 |
-| `wb/` | WorkBuddy 国内版 | ✅ 对话 + 工具调用 |
+| `wb/` | WorkBuddy 国内版 | ✅ 对话 |
 | `wbai/` | WorkBuddy 国际版 | 模型可列，账号额度耗尽时 429 |
+| `qoder/` | Qoder 国内版 | ✅ 对话 |
+| `qoderg/` | Qoder 国际版 | 模型可列，对话受账号排队限制 |
+
+**三条规则：**
+
+1. **前缀不能漏、不能错**——`qoder/qmodel_latest` 对，`qmodel_latest` 无法路由。
+2. **斜杠后面填 ID，不是显示名。** `GET /v1/models` 同时给 `id` 和 `name`：
+   - 填 `id`：`qoder/qmodel_latest`
+   - `name`（`Qwen3.7-Max`）只是给你看的，模型选择器显示它，但**别拿它当 ID 填**
+3. **大小写敏感**，且不同通道的同名模型 ID 可能不同（Trae 是 `DeepSeek-V4-Pro-Official`，WorkBuddy 是 `deepseek-v4-pro`）。
+
+```
+✅ qoder/qmodel_latest      → 显示为 Qwen3.7-Max
+✅ wb/deepseek-v4.1-flash
+❌ qoder/Qwen3.7-Max        ← 显示名当 ID，上游拒
+❌ qmodel_latest            ← 漏前缀
+```
 
 ### 实测可用模型（2026-10）
 
@@ -126,6 +143,12 @@ probe.cn.json / probe.global.json              # 推理探针结果
 **`wb/`**：`glm-5.3`、`glm-5.3-flash`、`glm-5.2`、`glm-5.1`、`glm-5v-turbo`、`deepseek-v4.1-flash`、`deepseek-v4-pro`、`kimi-k3-1`、`kimi-k2.8-preview`、`kimi-k2.7`、`kimi-k2.6`、`minimax-m3`、`minimax-m2.7`、`hy4-preview`、`hy3`、`hy3-x`
 
 **`wbai/`**（需额度）：`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`、`gpt-5.6-*`、`gpt-5.5`、`gpt-5.4`、`grok-4.7`、`gemini-3.8-flash`、`gemini-3.5-flash`、`glm-5.3`、`kimi-k3` 等 25 个
+
+**`qoder/`**（ID → 显示名）：`qmodel_latest`→Qwen3.7-Max、`qmodel_38max`→Qwen3.8-Max、`qmodel`→Qwen3.7-Plus、`qfmodel`→Qwen3.8-Flash、`q37fmodel`→Qwen3.7-Flash、`auto`→Auto，以及 `dmodel`/`dfmodel`（DeepSeek 系）、`gmodel`/`gfmodel`/`gm51model`（GLM 系）、`kmodel`/`kmodel_latest`（Kimi 系）、`mmodel`（MiniMax）
+
+**`qoderg/`**：另有 `ultimate`、`performance`、`efficient`、`smodel`、`cmodel`
+
+> 以上仅供参考，一切以 `http://127.0.0.1:8790/v1/models` 的实际返回为准。
 
 ## 目录结构
 

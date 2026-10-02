@@ -225,6 +225,32 @@ MSYS2_ARG_CONV_EXCL='*' taskkill /PID <PID> /F
 
 **注意**：ZCode 的 API 格式下拉**必须选 Chat Completions**，不要选 Responses（本项目只实现 chat completions 协议）。
 
+### 模型名怎么写（三条规则）
+
+```
+前缀/模型ID
+```
+
+1. **前缀定通道**：`trae/` `traeg/` `wb/` `wbai/` `qoder/` `qoderg/`——写错或漏写前缀都会被拒。
+2. **斜杠后面必须是上游的模型 ID，不是显示名**。`GET /v1/models` 现在**同时返回** `id` 和 `name`：
+   - `id`（**填这个**）：`qoder/qmodel_latest`
+   - `name`（**只是给人看的**）：`Qwen3.7-Max`
+   - 客户端模型选择器通常显示 `name`，但配置里必须落 `id`。把 `Qwen3.7-Max` 填进去，上游不认。
+3. **ID 大小写敏感**，且跨通道同名模型 ID 可能不同（Trae 用 `DeepSeek-V4-Pro-Official`，WorkBuddy 用 `deepseek-v4-pro`）。
+
+常见例子：
+
+```
+✅ qoder/qmodel_latest        → Qwen3.7-Max
+✅ wb/deepseek-v4.1-flash     → DeepSeek-V4.1-Flash
+✅ trae/glm-5.3               → GLM-5.3
+❌ qoder/Qwen3.7-Max          ← 显示名当 ID，上游拒
+❌ qmodel_latest              ← 没前缀，无法路由
+❌ QODER/QMODEL_LATEST        ← 前缀和 ID 都大小写错了
+```
+
+> 想知道某个显示名对应的 ID，直接查：`curl -s http://127.0.0.1:8790/v1/models`
+
 ### 可用模型（2026-10 实测）
 
 **`trae/`（15 个）**
@@ -249,10 +275,24 @@ wb/hy4-preview        wb/hy3                wb/hy3-x
 
 **`wbai/`（25 个，需账号额度）** 含 `gpt-6-astra`、`gpt-5.6-*`、`grok-4.7`、`gemini-3.8-flash`、`kimi-k3` 等。
 
-**`qoder/`（14 个）** 上游模型名较抽象：`auto`、`qmodel_latest`、`qmodel_38max`、`qfmodel`、`dmodel`、`gmodel`、`kmodel`、`mmodel` 等。
+**`qoder/`（14 个）** —— 上游 ID 是内部代号，**必须按 ID 填**，括号里是它在选择器里显示的名字：
+
+| ID（填这个） | 显示名 |
+|---|---|
+| `qmodel_latest` | Qwen3.7-Max |
+| `qmodel_38max` | Qwen3.8-Max |
+| `qmodel` | Qwen3.7-Plus |
+| `qfmodel` | Qwen3.8-Flash |
+| `q37fmodel` | Qwen3.7-Flash |
+| `auto` | Auto（自动选） |
+| `dmodel` / `dfmodel` | DeepSeek 系 |
+| `gmodel` / `gfmodel` / `gm51model` | GLM 系 |
+| `kmodel` / `kmodel_latest` | Kimi 系 |
+| `mmodel` | MiniMax |
+
 **`qoderg/`（17 个）** 另含 `ultimate`、`performance`、`efficient`、`smodel`、`cmodel`。
 
-> 以 `GET /v1/models` 的实际返回为准，上面仅作参考。
+> 以 `GET /v1/models` 的实际返回为准，上面仅作参考。该接口**同时返回 `id`（填这个）和 `name`（给人看的）**。
 
 ---
 
