@@ -79,11 +79,25 @@ export function createWorkBuddyStatus({ providers }) {
         };
       }
 
+      // 额度（源 workBuddyWebStatus 的 credits 段）：读不到就记 creditsError，
+      // 模型列表照常可用；无凭据时安静跳过（不报错，也不编造）。
+      // fetchCredits 返回 { total, accounts:[{packageName,remain,size}] }，本身不含凭据材料。
+      let creditsField = {};
+      try {
+        const credential = await liveProvider.store?.current();
+        if (credential !== undefined && liveProvider.client?.fetchCredits) {
+          creditsField = { credits: await liveProvider.client.fetchCredits(credential) };
+        }
+      } catch (e) {
+        creditsField = { creditsError: String(e?.message ?? e) };
+      }
+
       return {
         status: signedIn ? 'signed-in' : 'signed-out',
         ...(signedIn ? {} : { reason: 'no models discovered' }),
         variant,
         ...catalogField,
+        ...creditsField,
         models,
       };
     },
