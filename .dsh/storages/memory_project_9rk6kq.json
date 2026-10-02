@@ -1,0 +1,34 @@
+{
+  "unit": {
+    "name": "memory_project_9rk6kq",
+    "version": 1
+  },
+  "global": null,
+  "tables": {
+    "blocks": {
+      "9dd34249-018a-4d39-a447-f0150598a3cd": {
+        "namespace": "project",
+        "status": "approved",
+        "injected": false,
+        "source": "agent",
+        "content": "D:\\ProjectSave\\local-relay（本地订阅中转网关）的两条持久化陷阱与一条区域差异，改代码前必读：\n\n① **状态文件必须与 DSH 插件隔离**。WorkBuddy 三个 store（CatalogStore/VisibilityStore/ProbeStore）的默认路径都是 `join(resolveDshHome(), filename)`，即 `~/.dsh/.workbuddy-*.json` —— DSH 插件自己正在用同名文件，而 store 的 `persist()` 是**全量覆盖写**（读整个文件→改一处→写回）。两个进程同跑会互相把对方改动整段抹掉。故 local-relay 强制用 `src/state-dir.mjs` 落到 `~/.dsh/local-relay/`（`RELAY_STATE_DIR` 可覆盖）。**反过来**，Trae 的凭据副本 `~/.dsh/.trae-auth.<region>.json` 共享是**期望行为**（两边复用同一份登录态），别去\"隔离\"它。\n\n② **`WorkBuddyProbeService` 的 `account` 回调必须是同步的**。它把返回值当 Map 键、并做 `account() !== account` 恒等比较（源 index.js:1071/1100/1116）。传 async 函数会让两次调用返回两个不同 Promise，恒等比较永远为真 → 每次探测都报 `account changed before detection`、永远写不进记录。正确做法：异步解析一次凭据后**缓存**账号键，`account` 是同步 getter。\n\n③ **区域差异不是 bug**：Trae 的 CN 走 `snapshot`+`checkinStatus`，AI 走 `payStatus`（订阅制，无积分明细）；WorkBuddy 国际版本机缺 `WORKBUDDY_AI_ELECTRON_BIN`，`fetchCredits` 会报错、且其凭据无 uid 故**按设计不提供按账号偏好**（避免多账号共用一个桶）。\n\n④ 一个易踩的校验：`WorkBuddyCatalogStore` 读回时用 `isSaved()` 逐个校验模型行，要求每行都有 `id/name/contextWindow/maxTokens/supportsImages`；测试 fixture 漏字段会让整条记录读不回来（真实模型行都带这些字段，所以生产没事）。",
+        "keywords": [
+          "local-relay",
+          "状态文件隔离",
+          "state-dir",
+          "workbuddy-catalog.json",
+          "resolvedshhome",
+          "persist 覆盖写",
+          "probe account 同步",
+          "account changed before detection",
+          "issaved 校验",
+          "trae-auth 共享",
+          "relay_state_dir",
+          "workbuddyprobeservice"
+        ],
+        "createdAt": 1790949903108,
+        "updatedAt": 1790949903108
+      }
+    }
+  }
+}
