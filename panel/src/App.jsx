@@ -2,25 +2,26 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from './api.js';
 import ChannelHealth from './components/ChannelHealth.jsx';
 import TraeCard from './components/TraeCard.jsx';
+import WorkBuddyCard from './components/WorkBuddyCard.jsx';
 
 export default function App() {
   const [health, setHealth] = useState(null);
   const [trae, setTrae] = useState(null);
+  const [wb, setWb] = useState(null);
   const [error, setError] = useState('');
 
-  const loadTrae = useCallback(async () => {
-    setTrae(await api.getTrae());
-  }, []);
+  const loadTrae = useCallback(async () => { setTrae(await api.getTrae()); }, []);
+  const loadWb = useCallback(async () => { setWb(await api.getWorkBuddy()); }, []);
 
   const reload = useCallback(async () => {
     try {
       setError('');
-      const [h] = await Promise.all([api.getHealth(), loadTrae()]);
+      const [h] = await Promise.all([api.getHealth(), loadTrae(), loadWb()]);
       setHealth(h);
     } catch (e) {
       setError(String(e.message ?? e));
     }
-  }, [loadTrae]);
+  }, [loadTrae, loadWb]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -28,6 +29,12 @@ export default function App() {
     await api.postTraeRefresh(region);
     await loadTrae();
   }, [loadTrae]);
+
+  const controlWb = useCallback(async (variant, action) => {
+    const out = await api.postWorkBuddyControl(variant, action);
+    await loadWb();
+    return out;
+  }, [loadWb]);
 
   return (
     <div className="app">
@@ -39,6 +46,7 @@ export default function App() {
       <main className="app-body">
         <ChannelHealth health={health} />
         <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={() => {}} />
+        <WorkBuddyCard data={wb} onControl={controlWb} />
       </main>
     </div>
   );

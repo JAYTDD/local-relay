@@ -63,3 +63,7 @@ code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; 
 .kv-grid .k { display: block; color: var(--muted); font-size: 12px; }
 .kv-grid .v { font-size: 16px; }
 .details { margin: 8px 0; }
+
+.banner.note { background: rgba(76,141,255,.1); color: var(--accent); border: 1px solid rgba(76,141,255,.28); font-size: 13px; }
+.btn-row { display: flex; gap: 8px; }
+.json { background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow: auto; max-height: 220px; margin: 0; }
