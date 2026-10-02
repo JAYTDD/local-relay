@@ -91,6 +91,8 @@ local-relay/
 │       ├── workbuddy-status.mjs# WorkBuddy 面板数据
 │       ├── qoder-status.mjs    # Qoder 占位
 │       └── static.mjs          # 托管 Vite 产物（含 SPA fallback）
+├── scripts/
+│   └── dev.mjs                 # npm run dev：一条命令起前后端（零依赖）
 ├── panel/                      # React + Vite 前端
 │   ├── src/
 │   │   ├── App.jsx
@@ -133,18 +135,46 @@ local-relay/
 
 ## 四、如何启动
 
-### 日常启动（最常用）
+### 一条命令起前后端（改面板时用这个）
+
+```bash
+cd D:\ProjectSave\local-relay
+npm run dev
+```
+
+两条一起拉起，前端带热更新：
+
+| 进程 | 地址 | 说明 |
+|---|---|---|
+| 后端网关 | http://127.0.0.1:8790/v1 | `src/server.mjs` |
+| 前端面板（dev） | http://127.0.0.1:5173/panel | Vite dev server，改 `panel/src/` 即时生效 |
+
+`/panel/api/*` 由 Vite 代理到网关（见 `panel/vite.config.js`），所以两个地址都能打开面板并拿到真实数据；**dev 态不需要事先 build**。`Ctrl+C` 一次结束两个进程，且谁先挂会带停另一个（不留孤儿占端口）。
+
+端口可用 `RELAY_PORT` / `PANEL_PORT` 覆盖，两边保持一致（代理端口跟着 `RELAY_PORT` 走）：
+
+```bash
+RELAY_PORT=8800 PANEL_PORT=5200 npm run dev
+```
+
+实现见 `scripts/dev.mjs`：零依赖，只用 node 内置模块，没有引入 concurrently / npm-run-all。
+
+> 前端 dev server 显式绑定 `127.0.0.1`。不加 `--host` 时 Vite 只监听 `localhost`，本机把它解析成 `::1`，于是 `127.0.0.1:5173` 连不上（浏览器能用，脚本/工具会踩）。也别用裸 `--host`——那会绑 `0.0.0.0`，把带凭据的面板暴露到局域网。
+
+### 日常启动（最常用，只跑后端）
 
 ```bash
 cd D:\ProjectSave\local-relay
 node src/server.mjs
 ```
 
-`panel/dist` 已构建好，日常启动**不需要**重新构建前端。
+`panel/dist` 已构建好，日常启动**不需要**重新构建前端，面板由网关自己托管在 http://127.0.0.1:8790/panel。
 
 或双击 `start.cmd`。
 
 ### 改了前端（`panel/`）之后
+
+只想重建产物、不起 dev server：
 
 ```bash
 npm run build:panel      # 只构建面板
@@ -166,6 +196,7 @@ MSYS2_ARG_CONV_EXCL='*' taskkill /PID <PID> /F
 |---|---|---|
 | `RELAY_PORT` | `8790` | 监听端口 |
 | `RELAY_KEY` | 空 | 设了则客户端需带 `Authorization: Bearer <key>` |
+| `PANEL_PORT` | `5173` | 仅 `npm run dev`：前端 dev server 端口 |
 
 ### 访问地址
 

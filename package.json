@@ -6,6 +6,9 @@
   "description": "把 DSH 三个订阅接入插件（Trae / WorkBuddy / Qoder）的协议层提取成本地 OpenAI 兼容网关",
   "scripts": {
     "start": "node src/server.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:gateway": "node src/server.mjs",
+    "dev:panel": "npm --prefix panel run dev",
     "test": "node --test test/*.test.js",
     "build:panel": "npm --prefix panel install && npm --prefix panel run build",
     "start:full": "npm run build:panel && node src/server.mjs"

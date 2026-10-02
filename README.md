@@ -34,13 +34,24 @@ node src/server.mjs
 
 启动网关后打开 <http://127.0.0.1:8790/panel>。
 
-首次使用或改动 `panel/` 后需要构建一次前端：
+改面板时用一条命令把前后端一起起来（前端带热更新，改 `panel/src/` 即时生效）：
+
+```bash
+npm run dev
+```
+
+- 面板（dev）：<http://127.0.0.1:5173/panel>
+- 网关：<http://127.0.0.1:8790/v1>（面板 API 由 Vite 代理过来）
+
+`Ctrl+C` 一次结束两个进程。dev 态不需要 build。
+
+首次使用或只想重建产物时：
 
 ```bash
 npm run build:panel
 ```
 
-一条命令构建并启动：
+一条命令构建并启动（不跑 dev server）：
 
 ```bash
 npm run start:full
