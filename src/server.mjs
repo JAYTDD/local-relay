@@ -8,6 +8,7 @@
 import http from 'node:http';
 import { createTraeProvider } from './providers/trae.mjs';
 import { createWorkBuddyProvider } from './providers/workbuddy.mjs';
+import { createPanelApi } from './panel/api.mjs';
 
 const PORT = Number(process.env.RELAY_PORT ?? 8790);
 const ACCESS_KEY = process.env.RELAY_KEY ?? '';
@@ -21,6 +22,8 @@ const PROVIDERS = [
 ];
 
 const state = { providers: [], ready: false, errors: [] };
+
+const panelApi = createPanelApi({ providers: () => state.providers });
 
 function json(res, status, body) {
   const payload = JSON.stringify(body);
@@ -281,6 +284,11 @@ async function handleChat(req, res) {
 const server = http.createServer(async (req, res) => {
   try {
     const pathname = new URL(req.url, `http://127.0.0.1:${PORT}`).pathname;
+    if (pathname.startsWith('/panel/api/')) {
+      const handled = await panelApi.handle(req, res, pathname);
+      if (handled) return;
+      return json(res, 404, { error: { message: `no such panel route: ${pathname}` } });
+    }
     if (req.method === 'GET' && (pathname === '/healthz' || pathname === '/health')) {
       return json(res, 200, { ok: true, ready: state.ready, providers: state.providers.map((p) => ({ id: p.def.prefix, label: p.def.label, models: p.models.length, error: p.error })) });
     }
