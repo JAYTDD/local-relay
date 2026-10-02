@@ -1,0 +1,10 @@
+{
+  "name": "local-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "把 DSH 三个订阅接入插件（Trae / WorkBuddy / Qoder）的协议层提取成本地 OpenAI 兼容网关",
+  "scripts": {
+    "start": "node src/server.mjs"
+  }
+}

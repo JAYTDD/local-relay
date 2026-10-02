@@ -1,0 +1,10 @@
+# 派生的依赖副本（由 npm run sync:deps 从 shims/node_modules 重建）
+/node_modules/
+
+# 前端依赖与构建产物
+/panel/node_modules/
+/panel/dist/
+
+# 运行时与本地临时文件
+*.log
+.DS_Store
