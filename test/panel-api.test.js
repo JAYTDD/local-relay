@@ -42,3 +42,12 @@ test('unknown panel path is not handled', async () => {
   const handled = await api.handle({ method: 'GET', url: '/panel/api/nope', headers: {} }, res, '/panel/api/nope');
   assert.equal(handled, false);
 });
+
+test('GET /panel/api/qoder reports not-implemented', async () => {
+  const api = createPanelApi({ providers: fakeProviders });
+  const res = makeRes();
+  const handled = await api.handle({ method: 'GET', url: '/panel/api/qoder', headers: {} }, res, '/panel/api/qoder');
+  assert.equal(handled, true);
+  const body = JSON.parse(res.body);
+  assert.equal(body.status, 'not-implemented');
+});

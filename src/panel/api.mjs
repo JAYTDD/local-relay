@@ -4,6 +4,7 @@
  */
 import { createTraeStatus } from './trae-status.mjs';
 import { createWorkBuddyStatus } from './workbuddy-status.mjs';
+import { createQoderStatus } from './qoder-status.mjs';
 
 /** 安全 JSON 响应 */
 function json(res, status, body) {
@@ -45,6 +46,7 @@ export function createPanelApi(deps) {
   const routes = new Map();
   const traeStatus = createTraeStatus({ providers: deps.providers });
   const wbStatus = createWorkBuddyStatus({ providers: deps.providers });
+  const qoderStatus = createQoderStatus();
   routes.set('GET /panel/api/health', (req, res) => json(res, 200, healthDocument(deps.providers())));
   routes.set('GET /panel/api/trae', async (req, res) => {
     const out = {};
@@ -78,6 +80,7 @@ export function createPanelApi(deps) {
     }
     json(res, 200, await wbStatus.control(variant, action));
   });
+  routes.set('GET /panel/api/qoder', async (req, res) => json(res, 200, await qoderStatus.document()));
 
   return {
     /** 返回 true 表示已处理该请求 */
