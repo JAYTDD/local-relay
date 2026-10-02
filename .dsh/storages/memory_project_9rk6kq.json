@@ -56,6 +56,32 @@
         ],
         "createdAt": 1790951562027,
         "updatedAt": 1790951562027
+      },
+      "5fc78198-d623-4e7a-8109-71a8f7ea8039": {
+        "namespace": "project",
+        "status": "approved",
+        "injected": false,
+        "source": "agent",
+        "content": "接手 D:\\ProjectSave\\local-relay（本地订阅中转网关）时的作业规则。**先读 PROJECT.md（交接文档，坑 1–11 全在里面）和 docs/superpowers/plans/ 下的计划。**\n\n**这个项目的本质**：不重写任何协议，而是把 DSH 三个订阅插件（dsh-connect-trae / dsh-workbuddy-connect / dsh-qoder-connect）里**已经写好的**注入式协议层装配成独立网关。所以遇到问题时，**正确答案几乎总在插件的 shims/node_modules/<插件>/lib/ 里**——去读它的装配顺序（`apply()` / `createVariantRuntime()`）和调用点，不要自己发明。用户对此很敏感：他会说\"插件都是可以用的，你移植出问题了，自己对一下\"。\n\n**零 npm 依赖是硬约束**：根 package.json 不许加 dependencies。\n\n**改动必须跑的验证**（PROJECT.md 第七节有完整清单）：\n- `node --test test/*.test.js` —— 当前 71 项。**注意：测试运行器要 spawn 子进程，受限沙箱下会报 `spawn EPERM`，需要放开权限才能跑**\n- `curl -s http://127.0.0.1:8790/v1/models` 模型总数（当前 90）\n- 流规范化哨兵：用 `wb/` 打流式，数 `\"role\"` 必须 = 1。**别用 `trae/`**——Trae 上游的 delta 从不带 role，得到 0 是正常的（坑 11）\n\n**已知的坑（详见 PROJECT.md 第六节，这里只列最贵的）**：\n- 桩不是\"空实现\"就够：`@deepseek-ai/dsh-llm` 桩里的 `ProviderRequestId` 必须可调用、消息构造器必须强制补 `role`，否则 Qoder 对话不通（坑 9）\n- transport 的错误包装会掩盖真实原因（把普通 TypeError 换成 `reading 'status'` + 502），排查时直接驱动 `transport.stream()`（坑 10）\n- 状态文件必须与 DSH 插件隔离（`src/state-dir.mjs` → `~/.dsh/local-relay/`），因为 store 的 persist() 是全量覆盖写（坑见 project 记忆）\n- 改 `server.mjs` 流式分支后必跑 role 哨兵（坑 1）\n\n**别做的**：Trae raw chat（依赖外部 sqlite3）、host heartbeat 组（DSH CLI 专用无消费方）、探针 `clear`/最大上下文开关（未定交互语义）。PROJECT.md 第十节列了完整清单和理由，**不要\"顺手补全\"**。",
+        "keywords": [
+          "local-relay",
+          "交接",
+          "接手",
+          "onboarding",
+          "project.md",
+          "作业规则",
+          "零 npm 依赖",
+          "回归验证",
+          "role 哨兵",
+          "不要改 trae role",
+          "依赖于插件",
+          "shims",
+          "apply 装配顺序",
+          "测试 spawn eperm",
+          "明确不做"
+        ],
+        "createdAt": 1790953032625,
+        "updatedAt": 1790953032625
       }
     }
   }

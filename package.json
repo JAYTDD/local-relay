@@ -9,6 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:gateway": "node src/server.mjs",
     "dev:panel": "npm --prefix panel run dev",
+    "sync:deps": "node scripts/sync-deps.mjs",
     "test": "node --test test/*.test.js",
     "build:panel": "npm --prefix panel install && npm --prefix panel run build",
     "start:full": "npm run build:panel && node src/server.mjs"

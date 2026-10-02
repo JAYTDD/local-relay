@@ -3,24 +3,33 @@
 > 本文档写给**零上下文的接手者**（人或 AI）。读完即可独立维护本项目，无需先了解它的来历。
 > 项目路径：`D:\ProjectSave\local-relay`
 
+> **三条最先要知道的事**
+> 1. **本项目不重写任何协议**——它把 DSH 三个订阅插件里已经写好的注入式协议层装配成独立网关。遇到问题先读 `shims/node_modules/<插件>/lib/` 的源码。
+> 2. **零 npm 依赖**是硬约束（根 `package.json` 只有 `scripts`，没有 `dependencies`）。
+> 3. 启动：双击 **`dev.cmd`**（前后端一起）或 `npm start`（仅后端）。详见第四节。
+
 ---
 
 ## 一、这是什么
 
-一个**跑在本机的 OpenAI 兼容网关**，把 DSH（DeepSeek Harness）三个订阅接入插件所对接的账号额度，转成标准 OpenAI API，供 ZCode 等任意支持自定义 OpenAI 接口的客户端使用。
+一个**跑在本机的 OpenAI 兼容网关**，把 DSH（DeepSeek Harness）三个订阅接入插件（Trae / WorkBuddy / Qoder）所对接的账号额度，转成标准 OpenAI API，供 ZCode 等任意支持自定义 OpenAI 接口的客户端使用。
 
-**一句话**：让 ZCode 能用上 Trae / WorkBuddy 的订阅额度。
+**一句话**：让 ZCode 能用上 Trae / WorkBuddy / Qoder 的订阅额度。
 
 ### 支持的通道
 
-| 前缀 | 通道 | 状态 |
-|---|---|---|
-| `trae/` | Trae 国内版 | ✅ 实测可用（对话 + 工具调用） |
-| `traeg/` | Trae 国际版 | 需登录国际版客户端 |
-| `wb/` | WorkBuddy 国内版 | ✅ 实测可用（对话 + 工具调用） |
-| `wbai/` | WorkBuddy 国际版 | 模型可列，受账号额度约束 |
-| `qoder/` | Qoder 国内版 | ✅ 实测可用（对话 + 模型 + 额度 + 签到） |
-| `qoderg/` | Qoder 国际版 | 模型/额度可用；对话被账号排队挡住（`throttled`） |
+共 **6 个前缀、90 个模型**（2026-10 实测）。「对话可用」指实测过经网关流式出字。
+
+| 前缀 | 通道 | 模型数 | 状态 |
+|---|---|---|---|
+| `trae/` | Trae 国内版 | 15 | ✅ 对话可用 |
+| `traeg/` | Trae 国际版 | 7 | ⚠️ 未登录国际版客户端，只有兜底花名册 |
+| `wb/` | WorkBuddy 国内版 | 17 | ✅ 对话可用 |
+| `wbai/` | WorkBuddy 国际版 | 20 | ⚠️ 模型可列，额度受限 |
+| `qoder/` | Qoder 国内版 | 14 | ✅ 对话可用 |
+| `qoderg/` | Qoder 国际版 | 17 | ⚠️ 模型/额度可用，对话被账号 p3 排队挡住 |
+
+> `traeg/` 与 `qoderg/` 的不可用**都是账号侧条件，不是代码问题**。详见第十节。
 
 ---
 
@@ -81,17 +90,19 @@ ZCode / 任意 OpenAI 客户端
 
 ```
 local-relay/
+├── dev.cmd                     # ★ 双击启动前后端（唯一启动脚本）
 ├── src/
-│   ├── server.mjs              # 统一入口：前缀路由 + 流规范化 + 静态托管
+│   ├── server.mjs              # 统一入口：前缀路由 + 流规范化 + 静态托管 + /v1/models
 │   ├── state-dir.mjs           # 持久化状态目录（与 DSH 插件隔离，见第八节）
 │   ├── providers/
-│   │   ├── trae.mjs            # Trae 栈装配（cn / ai 两区域）+ 死模型过滤
-│   │   └── workbuddy.mjs       # WorkBuddy 栈装配（cn / global 两变体）+ 目录/可见性/探针
+│   │   ├── trae.mjs            # Trae 栈装配（cn / ai）+ 死模型过滤
+│   │   ├── workbuddy.mjs       # WorkBuddy 栈装配（cn / global）+ 目录/可见性/探针
+│   │   └── qoder.mjs           # Qoder 栈装配（cn / global）+ 未导出 transport 的加载
 │   └── panel/
 │       ├── api.mjs             # /panel/api/* 路由编排
 │       ├── trae-status.mjs     # Trae 面板数据（登录态 + 额度 + 签到 + 诊断）
 │       ├── workbuddy-status.mjs# WorkBuddy 面板数据（额度 + 目录 + 可见性 + 探针）
-│       ├── qoder-status.mjs    # Qoder 占位
+│       ├── qoder-status.mjs    # Qoder 面板数据（额度 + 签到 + 探针 + 凭据尾号）
 │       └── static.mjs          # 托管 Vite 产物（含 SPA fallback）
 ├── scripts/
 │   └── dev.mjs                 # npm run dev：一条命令起前后端（零依赖）
@@ -104,19 +115,22 @@ local-relay/
 │   │       ├── TraeCard.jsx
 │   │       ├── WorkBuddyCard.jsx
 │   │       ├── QoderCard.jsx
-│   │       └── ModelTable.jsx      # 两个卡片共用
-│   └── vite.config.js          # base: '/panel/'
-├── shims/node_modules/         # ★ 从 DSH 插件提取的协议层 + 5 个依赖桩
+│   │       └── ModelTable.jsx      # 三个卡片共用
+│   └── vite.config.js          # base: '/panel/'，代理端口跟随 RELAY_PORT
+├── shims/node_modules/         # ★ 从 DSH 插件提取的协议层 + 依赖桩（入库，可 diff 审查）
 │   ├── dsh-connect-trae/       # v2.5.0
 │   ├── dsh-workbuddy-connect/  # v0.7.0
 │   ├── dsh-qoder-connect/      # v0.2.2
-│   ├── @deepseek-ai/           # 5 个桩包
+│   ├── @deepseek-ai/           # 6 个桩包（含 schemastery）
 │   └── @earendil-works/
-├── test/                       # node:test 测试（26 项）
-├── docs/superpowers/plans/     # 面板实施计划（历史文档）
+├── test/                       # node:test 测试（71 项）
+├── docs/superpowers/plans/     # 实施计划（历史文档，含已完成的移植计划）
 ├── README.md                   # 用户向使用说明
 └── PROJECT.md                  # 本文件（交接文档）
 ```
+
+> `node_modules/` 是 `shims/node_modules/` 的副本（`.gitignore` 忽略），靠 **`npm run sync:deps`** 重建。
+> 改了桩之后**两份都要更新**（`cp shims/node_modules/... node_modules/...`），否则运行时读的还是旧的——Qoder 的桩修复就踩过这个。
 
 ### 依赖桩（为什么需要）
 
@@ -490,9 +504,12 @@ local-relay 自己的持久化状态放在 **`~/.dsh/local-relay/`**（`RELAY_ST
 
 ## 九、Git 状态
 
-本地新建仓库（无远端），所有工作提交在 `master`：
+本地新建仓库（**无远端**），所有工作提交在 `master`。
+
+历史分两段。**第一段：初始导入 + 面板骨架**（`98523bd` … `b2d2e32`）：
 
 ```
+b2d2e32 docs: add PROJECT.md handover guide for new sessions
 d4196b8 fix(panel): report real Trae sign-in state instead of always signed-out
 58f0b9d test(panel): add end-to-end acceptance tests for the panel
 6889d00 feat(panel): add Qoder placeholder card and document the panel
@@ -506,6 +523,27 @@ b36c2f4 feat(panel): add Trae status document assembly
 f17378d feat(panel): add panel API skeleton with health endpoint
 98523bd chore: initial import of local-relay gateway and panel plan
 ```
+
+**第二段：补齐未移植能力 + 接入 Qoder + 一键启动**（`1a58554` 之后，共 16 个提交）。按时间顺序，每个都对应上面某节：
+
+| 提交 | 内容 |
+|---|---|
+| `1a58554` | `npm run dev` 一键启动 + 移植计划文档 |
+| `c8e19e0` | Trae 额度/签到（`TraeUsageClient`） |
+| `b000b62` | Trae 签到领取（**先读后写**守卫） |
+| `9f6462e` | Trae 死模型过滤（`dropDeadModels`）+ 登录诊断 |
+| `5e5d6f7` | WorkBuddy 状态隔离 + 目录持久化 + 促销重算 |
+| `57fbcab` | WorkBuddy 额度 |
+| `360f06f` | WorkBuddy 模型启停（visibility） |
+| `99ca24d` | WorkBuddy 推理探针 |
+| `703d47e` | 面板补齐 + 文档同步 |
+| `97efa3c` | 计划文档标记完成 |
+| `2d0b2cf` | **接入 Qoder 通道**（+ 修两个依赖桩缺陷） |
+| `4869133` | Qoder 国内版对话打通（验证 + 文档更正） |
+| `d1c6646` | `/v1/models` 返回显示名（六通道） |
+| `eb54289` / `5dfbc5c` | `dev.cmd` 一键启动；删掉 start.cmd/start.sh |
+
+> 想快速回顾这一轮改了什么：`git log --oneline b2d2e32..HEAD`，或 `git diff b2d2e32..HEAD --stat`。
 
 `.gitignore` 忽略：`/node_modules/`、`/panel/node_modules/`、`/panel/dist/`、`*.log`。
 
@@ -567,9 +605,19 @@ node src/server.mjs
 
 ## 十三、给接手者的快速上手路径
 
-1. 读本文档第二、三节（理解设计）和第六节（坑）
-2. `node --test test/*.test.js` 确认基线绿
-3. `node src/server.mjs` 启动，浏览器打开 `/panel` 看效果
-4. 需要改前端 → 改 `panel/src/`，跑 `npm run build:panel`
-5. 需要改后端 → 改 `src/`，跑全量测试 + 第七节的回归清单
-6. 遇到"同一后端不同客户端表现不同"的问题 → **先抓原始 SSE 逐帧看字段，不要猜**（坑 1 就是这么找到的）
+0. **先记住这个项目的本质**：这里不重写任何协议，只是把 DSH 三个插件里**已经写好的**注入式协议层装配起来。所以**遇到问题先去读插件的源码**——`shims/node_modules/<插件>/lib/index.js` 的 `apply()` / `createVariantRuntime()` 是权威的装配顺序，`variants-*.js` 是具体实现。**不要自己发明协议**。
+1. 读本文档第二、三节（理解设计）和第六节（11 个坑，都是真金白银换来的）
+2. 读 `docs/superpowers/plans/2026-10-02-local-relay-remaining-port.md`（已完成的移植计划，含哪些刻意不做及理由）
+3. `node --test test/*.test.js` 确认基线绿（当前 71 项）
+4. **双击 `dev.cmd`**（或 `npm run dev`）启动前后端，浏览器看 `/panel`；只跑后端用 `npm start`
+5. 需要改前端 → 改 `panel/src/`（dev 态热更新；发布要跑 `npm run build:panel`）
+6. 需要改后端 → 改 `src/`，跑全量测试 + 第七节的回归清单
+7. 遇到"同一后端不同客户端表现不同"的问题 → **先抓原始 SSE 逐帧看字段，不要猜**（坑 1 就是这么找到的）
+8. 加新通道时：`grep` 目标插件 import 了哪些依赖桩符号、**怎么用**，再决定桩要不要补（坑 9 的教训）
+
+### 本仓库的硬约束
+
+- **零 npm 依赖**：根 `package.json` 不许加 `dependencies`（只用 Node 内置模块）
+- **状态文件必须隔离**：`src/state-dir.mjs` → `~/.dsh/local-relay/`，**不要**改回 `workbuddyCatalogPath()` 之类的默认路径（会与 DSH 插件互相覆盖，见第八节）
+- **面板 API 响应体绝不含凭据**
+- **写操作绝不静默成功**
