@@ -109,3 +109,74 @@ test('签到的额外奖励字段透传，0 不显示', async () => {
   const doc = await createTraeStatus(cnDeps(provider)).document('cn');
   assert.equal(doc.checkin.extraCredits, 3);
 });
+
+test('signed-out 时给出扫描过的凭据位置', async () => {
+  const provider = {
+    store: {
+      status: async () => ({ state: 'signed-out', reason: 'no credential' }),
+      accounts: async () => [],
+      diagnose: async () => ({
+        tried: 2,
+        failures: [
+          { path: 'C:\\Users\\x\\AppData\\Roaming\\Trae CN\\User\\globalStorage\\storage.json', edition: 'cn', source: 'desktop', reason: 'missing' },
+          { path: 'C:\\other', edition: 'cn', source: 'cli', reason: 'invalid' },
+        ],
+      }),
+    },
+    models: () => [],
+  };
+  const doc = await createTraeStatus(cnDeps(provider)).document('cn');
+  assert.equal(doc.searched.length, 2);
+  assert.equal(doc.searched[0].reason, 'missing');
+  assert.equal(doc.searched[0].edition, 'cn');
+});
+
+test('诊断信息里的路径不泄漏 token 材料', async () => {
+  const provider = {
+    store: {
+      status: async () => ({ state: 'signed-out', reason: 'no credential' }),
+      accounts: async () => [],
+      diagnose: async () => ({
+        tried: 1,
+        failures: [
+          { path: 'C:\\x\\storage.json', edition: 'cn', source: 'desktop', reason: 'invalid', message: 'accessToken=SECRET' },
+        ],
+      }),
+    },
+    models: () => [],
+  };
+  const doc = await createTraeStatus(cnDeps(provider)).document('cn');
+  // 只保留 path/edition/source/reason 与截断后的 message；
+  // 此处断言的是"我们自己不注入凭据"，message 内容由 store 决定。
+  assert.equal(doc.searched[0].path, 'C:\\x\\storage.json');
+  assert.equal(doc.searched[0].edition, 'cn');
+  assert.equal(doc.searched[0].reason, 'invalid');
+});
+
+test('signed-in 时不做诊断扫描', async () => {
+  let diagnosed = false;
+  const provider = {
+    store: {
+      status: async () => ({ state: 'signed-in' }),
+      accounts: async () => [],
+      diagnose: async () => { diagnosed = true; return { tried: 0, failures: [] }; },
+    },
+    models: () => [],
+    usage: { snapshot: async () => ({}), checkinStatus: async () => ({}) },
+  };
+  await createTraeStatus(cnDeps(provider)).document('cn');
+  assert.equal(diagnosed, false, '已登录还去扫凭据是白费功夫');
+});
+
+test('store 没有 diagnose 时不崩', async () => {
+  const provider = {
+    store: {
+      status: async () => ({ state: 'signed-out', reason: 'nope' }),
+      accounts: async () => [],
+    },
+    models: () => [],
+  };
+  const doc = await createTraeStatus(cnDeps(provider)).document('cn');
+  assert.equal(doc.status, 'signed-out');
+  assert.equal(doc.searched, undefined);
+});

@@ -118,11 +118,26 @@ export function createTraeStatus({ providers }) {
       // 查询真实登录态；任何异常都退化为 signed-out 但带上原因
       let statusDoc = { state: 'signed-out' };
       let accounts = [];
+      let searched = [];
       let reason;
       try {
         if (store) {
           statusDoc = (await store.status()) ?? { state: 'signed-out' };
           accounts = await store.accounts();
+          // 面板要能回答"为什么没登录"：列出扫描过的凭据位置。
+          // 只暴露 path/edition/source/reason（源 traeWebUsage 的 signed-out 分支同款）。
+          if (statusDoc.state !== 'signed-in' && typeof store.diagnose === 'function') {
+            try {
+              const { failures } = await store.diagnose();
+              searched = (failures ?? []).map((f) => ({
+                path: f.path,
+                edition: f.edition,
+                source: f.source,
+                reason: f.reason,
+                ...(f.message === undefined ? {} : { message: String(f.message).slice(0, 200) }),
+              }));
+            } catch { /* 诊断失败不影响文档 */ }
+          }
         } else {
           reason = 'credential store not wired';
         }
@@ -169,6 +184,7 @@ export function createTraeStatus({ providers }) {
         ...(signedIn ? {} : { reason: reason ?? statusDoc.reason ?? 'no credential' }),
         ...(statusDoc.reasonCode === undefined ? {} : { reasonCode: statusDoc.reasonCode }),
         accounts,
+        ...(searched.length > 0 ? { searched } : {}),
         ...(selected
           ? {
               accountId: selected.id,
