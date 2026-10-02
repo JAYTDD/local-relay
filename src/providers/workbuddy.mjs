@@ -11,25 +11,18 @@ const logger = {
 };
 
 /**
- * 当前账号键（visibility / probe / catalog 都按它分桶）。
+ * 从凭据算账号键（visibility / probe / catalog 都按它分桶）。纯函数，不做 IO。
  *
  * 刻意比插件的 visibilityAccountOf 更严：它只判 `uid === ""`，于是
  * `{ enterpriseId: 'e1' }` 这种 uid 缺失的凭据会算出 `"undefined:e1"` —— 一个
  * 真值字符串，让所有缺 uid 的账号悄悄共用一个桶。源注释明说这种情况就该
  * "完全没有按账号的偏好"（宁可没有，也不能把一个账号的隐藏列表套到另一个上）。
  * 所以这里把 uid 缺失/空串一律判为"没有账号"。
- *
- * @returns {Promise<string|undefined>}
  */
-async function accountKeyOf(store) {
-  try {
-    const credential = await store.resolve();
-    if (credential === undefined || credential === null) return undefined;
-    if (typeof credential.uid !== 'string' || credential.uid === '') return undefined;
-    return wb.visibilityAccountOf(credential);
-  } catch {
-    return undefined;
-  }
+function accountKeyFromCredential(credential) {
+  if (credential === undefined || credential === null) return undefined;
+  if (typeof credential.uid !== 'string' || credential.uid === '') return undefined;
+  return wb.visibilityAccountOf(credential);
 }
 
 /**
@@ -66,7 +59,48 @@ export function createWorkBuddyProvider(variantId) {
   /** 目录来源（面板要能说明这批模型是哪来的） */
   let catalogSource = { source: 'fallback' };
 
-  const account = () => accountKeyOf(store);
+  /**
+   * 账号键缓存。
+   *
+   * 必须是**同步**读取，因为 WorkBuddyProbeService 把它当 Map 键用、并做
+   * `account() !== account` 的恒等比较（源 index.js:1071/1100/1116）。传异步函数
+   * 会让两次调用返回两个不同的 Promise，恒等比较永远为真，探测就永远报
+   * "account changed before detection"。
+   *
+   * 所以照插件的做法：异步解析一次凭据后把身份存下来，之后同步读。
+   */
+  let cachedAccount;
+
+  /** 异步刷新账号键缓存，返回最新的键 */
+  const refreshAccount = async () => {
+    try {
+      cachedAccount = accountKeyFromCredential(await store.resolve());
+    } catch {
+      cachedAccount = undefined;
+    }
+    return cachedAccount;
+  };
+
+  /** 同步读账号键（未解析过时为 undefined） */
+  const account = () => cachedAccount;
+
+  // 推理探针（源 createVariantRuntime 同款装配）。会真发上游请求并消耗额度，
+  // 因此必须守住 consent 语义。
+  const probeStore = new wb.WorkBuddyProbeStore({
+    pluginVersion: 'local-relay/0.1.0',
+    path: statePath(`probe.${variantId}.json`),
+  });
+  const probeService = new wb.WorkBuddyProbeService({
+    store: probeStore,
+    catalog,
+    credentials: store,
+    client,
+    // 本地网关没有设置界面 → 自动探测不授权。
+    // 面板的手动点击走 probe(modelId, manualConsent=true) 这条"一次性同意"通道，
+    // 它不改变这里的配置。
+    consent: () => false,
+    account,
+  });
 
   return {
     id: variant.id,
@@ -78,12 +112,17 @@ export function createWorkBuddyProvider(variantId) {
     client,
     savedCatalogs,
     visibility,
+    probeStore,
+    probeService,
     account,
     catalogSource: () => ({ ...catalogSource }),
 
     async start() {
-      // 先试上次保存的目录，让重启后的头几秒就有真实模型可用
-      const saved = savedCatalogs.get(await account());
+      // 先解析一次凭据，把账号键缓存填上（探针的同步 account() 依赖它）
+      await refreshAccount();
+
+      // 再试上次保存的目录，让重启后的头几秒就有真实模型可用
+      const saved = savedCatalogs.get(account());
       if (saved !== undefined && Array.isArray(saved.models) && saved.models.length > 0) {
         catalog.set(saved.models);
         catalogSource = {
@@ -104,12 +143,13 @@ export function createWorkBuddyProvider(variantId) {
       const errors = [];
       try {
         const credential = await store.resolve();
+        await refreshAccount();
         const models = await client.fetchModels(credential);
         if (Array.isArray(models) && models.length > 0) {
           catalog.set(models);
           catalogSource = { source: 'live', fetchedAtMs: Date.now() };
           // 落盘供下次启动使用（写失败被 store 吞掉，源行为）
-          const key = await account();
+          const key = account();
           if (key !== undefined) {
             savedCatalogs.set(key, {
               source: 'workbuddy:catalog',

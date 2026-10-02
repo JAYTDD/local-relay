@@ -85,6 +85,18 @@ export function createPanelApi(deps) {
     }
     json(res, 200, await wbStatus.control(variant, action));
   });
+  routes.set('POST /panel/api/workbuddy/probe', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const variant = url.searchParams.get('variant') ?? 'cn';
+    const raw = await readRequestBody(req);
+    let body;
+    try {
+      body = JSON.parse(raw || '{}');
+    } catch {
+      return json(res, 400, { error: { message: 'invalid JSON body' } });
+    }
+    json(res, 200, await wbStatus.probe(variant, body.model));
+  });
   routes.set('GET /panel/api/qoder', async (req, res) => json(res, 200, await qoderStatus.document()));
 
   return {

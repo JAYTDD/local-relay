@@ -102,6 +102,31 @@ export function createWorkBuddyStatus({ providers }) {
         }
       } catch { /* 读不到就不显示 */ }
 
+      // 探针区（源 isProbeCandidate / probeSection 语义）：候选 = 支持推理但上游
+      // 没声明 effort 集的模型。故意不按"已有结果"过滤——那样列表会越用越短，
+      // 想重测一个得先清掉所有别的结果。
+      let probeField = {};
+      const probeService = liveProvider.probeService;
+      if (probeService) {
+        const all = liveProvider.models?.() ?? entry.models ?? [];
+        const candidates = all
+          .filter((m) => m.reasoning?.supports === true && (m.reasoning.supportedEfforts?.length ?? 0) === 0)
+          .map((m) => m.id);
+        const results = all.flatMap((m) => {
+          const record = probeService.recordFor(m.id);
+          return record === undefined
+            ? []
+            : [{
+                id: m.id,
+                name: m.name ?? m.id,
+                validation: record.validation,
+                efforts: record.efforts,
+                probedAt: record.probedAtMs,
+              }];
+        });
+        probeField = { probe: { running: probeService.isRunning(), candidates, results } };
+      }
+
       return {
         status: signedIn ? 'signed-in' : 'signed-out',
         ...(signedIn ? {} : { reason: 'no models discovered' }),
@@ -109,8 +134,33 @@ export function createWorkBuddyStatus({ providers }) {
         ...catalogField,
         ...creditsField,
         ...visibilityField,
+        ...probeField,
         models,
       };
+    },
+
+    /**
+     * 手动探测一个模型的推理 effort。
+     *
+     * manualConsent=true 是"一次性同意"：只授权这一次，不改变自动探测配置。
+     * 这是真会发上游请求、可能消耗额度的操作，所以未装配时明确失败而不是假装成功。
+     */
+    async probe(variant, modelId) {
+      const entry = providerFor(providers(), variant);
+      if (!entry) return { state: 'failed', reason: `variant not configured: ${variant}` };
+      if (!entry.provider) return { state: 'failed', reason: entry.error ?? 'provider unavailable' };
+      if (typeof modelId !== 'string' || modelId === '') {
+        return { state: 'failed', reason: 'probe requires a model id' };
+      }
+      const probeService = entry.provider.probeService;
+      if (!probeService) {
+        return { state: 'failed', reason: 'action not wired yet: probe (needs probe service)' };
+      }
+      try {
+        return await probeService.probe(modelId, true);
+      } catch (e) {
+        return { state: 'failed', reason: String(e?.message ?? e) };
+      }
     },
 
     async control(variant, action) {
