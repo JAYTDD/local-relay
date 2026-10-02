@@ -28,6 +28,34 @@
         ],
         "createdAt": 1790949903108,
         "updatedAt": 1790949903108
+      },
+      "cfb3fa7c-75ce-463d-8e20-a1fd467ed122": {
+        "namespace": "project",
+        "status": "approved",
+        "injected": false,
+        "source": "agent",
+        "content": "D:\\ProjectSave\\local-relay 的 Qoder 通道**已经接上了**（早期 PROJECT.md 写\"未接入\"是错的，已修正）。\n\n关键事实：\n- `createQoderTransport` / `getMachineId` **没有从 dsh-qoder-connect 包根导出**，`import 'dsh-qoder-connect/lib/variants-CFI6-cGn.js'` 会报 ERR_PACKAGE_PATH_NOT_EXPORTED，但按**绝对路径**导入同一个文件就能拿到（导出名是压缩后的 `b`=createQoderTransport、`x`=getMachineId）。装配配方在源 index.js 的 createVariantRuntime，本机 6 通道共 90 个模型。\n- **两个依赖桩缺陷**曾卡住 Qoder 对话，都已在 shims/node_modules/@deepseek-ai/dsh-llm 修好：① `ProviderRequestId` 必须是**可调用函数**（原桩是 `{create}` 对象），② `createUserMessage`/`createAssistantMessage`/`createToolResultMessage` **必须强制注入 `role`**（调用点传的是 `{content, source}` 不带 role，原桩只在参数 undefined 时才补）。教训：桩的\"最小\"边界要按实际调用点 grep 确认，别按注释猜。\n- **transport 的错误包装会掩盖真实原因**：`failureResult()` 只认 LlmError/UpstreamRequestError，普通 TypeError 会落进兜底分支再读 `.status`，真实错误被替换成 `TypeError: Cannot read properties of undefined (reading 'status')` + 502。排查必须绕开它——直接驱动 `transport.stream()` 或包一层 fetch/logger。\n- Qoder 特有：`shim.baseUrl` 和 `shim.token` 是**函数**（要 `shim.baseUrl()`），Trae/WorkBuddy 是字符串；transport 的 `attachments` 是必填（`enforceImageLimits` 无条件读 `attachments.imageLimits`）；上游 chat 请求 body 是编码过的（URL 带 `Encode=1`），不能用普通 JSON 比对。\n- 本机 Qoder 两个变体凭据都在 ~/.dsh/profiles/desktop/.dsh-qoder-connect/；国际版账号常处于 p3 排队（throttled）。",
+        "keywords": [
+          "qoder",
+          "local-relay",
+          "createqodertransport",
+          "getmachineid",
+          "variants-cfi6-cgn",
+          "err_package_path_not_exported",
+          "providerrequestid",
+          "createusermessage",
+          "role 缺失",
+          "依赖桩",
+          "dsh-llm",
+          "failureresult",
+          "reading 'status'",
+          "attachments.imagelimits",
+          "shim.baseurl",
+          "encode=1",
+          "qoder 接入"
+        ],
+        "createdAt": 1790951562027,
+        "updatedAt": 1790951562027
       }
     }
   }

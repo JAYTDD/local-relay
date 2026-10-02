@@ -19,8 +19,8 @@
 | `traeg/` | Trae 国际版 | 需登录国际版客户端 |
 | `wb/` | WorkBuddy 国内版 | ✅ 实测可用（对话 + 工具调用） |
 | `wbai/` | WorkBuddy 国际版 | 模型可列，受账号额度约束 |
-| `qoder/` | Qoder 国内版 | ✅ 模型/额度/签到可用（对话见下） |
-| `qoderg/` | Qoder 国际版 | 账号排队（`throttled`），非代码问题 |
+| `qoder/` | Qoder 国内版 | ✅ 实测可用（对话 + 模型 + 额度 + 签到） |
+| `qoderg/` | Qoder 国际版 | 模型/额度可用；对话被账号排队挡住（`throttled`） |
 
 ---
 
@@ -330,9 +330,19 @@ Trae 国际版未登录时启动会失败，`state.providers` 里该项的 `prov
 1. **`ProviderRequestId` 必须是可调用函数**。原桩写成 `{ create: ... }` 对象，而 Qoder 的 transport 直接当函数调（`ProviderRequestId(headers.get('x-request-id'))`）→ 抛 `ProviderRequestId is not a function`。
 2. **`createUserMessage` / `createAssistantMessage` / `createToolResultMessage` 必须补 `role`**。原桩是 `return m ?? {role:...}`，只在参数为 `undefined` 时才补；而调用点传的是 `{content, source}`（**不带 role**），于是每条消息都缺 `role` → 上游回 400 `invalid_parameter_error: is not one of ['system','assistant','user','tool','function']`。
 
-两个都已修（函数式 + 强制补 role），且都保留对象式 `.create` 兼容。
+两个都已修（函数式 + 强制补 role），且都保留对象式 `.create` 兼容。**修完这两处，Qoder 国内版对话就跑通了**（实测经网关流式返回 `PONG`）。
 
 **教训**：桩的"最小"边界要按**实际调用点**确定，不能按注释猜。新增通道时先 `grep` 一下该通道 import 了桩里的哪些符号、怎么用的。
+
+### 坑 11：`trae/` 的流式响应没有 `role` 帧，这是正常的
+
+Trae 上游的 SSE delta **从不带 `role`**，所以经 `/v1/chat/completions` 出来的流里 `"role"` 计数是 **0**。`wb/` 和 `qoder/` 各带 1 次。
+
+这不是缺陷：`normalizeChunk()` 的写法是 `if (delta.role && !seen.role)`——**上游给才转发**，不会凭空造一个 role 出来。实测在 Trae shim 的原样输出里同样是 0 次，所以是上游行为。
+
+> 后果：`PROJECT.md` 第七节回归清单里那条"`"role"` 计数应为 1"**只对 `wb/` 成立**。用 `trae/` 测会得到 0，别误判成回归。要一个稳定的流规范化哨兵，就用 `wb/`。
+
+另外 Trae 的模型（如 `glm-5.3`）会先吐一大段 `reasoning_content`，`content` 帧在很后面才出现。用 `curl` 短超时观察会以为"没有正文"，实际是还没轮到——验证时给足超时（180s）或改用非流式。
 
 ### 坑 10：transport 的错误包装会掩盖真实原因
 
@@ -469,9 +479,8 @@ f17378d feat(panel): add panel API skeleton with health endpoint
 
 | 项 | 说明 |
 |---|---|
-| **Qoder 对话通道** | 模型/额度/签到已通；对话请求被上游拒绝（详见坑 9）。**不是"未接入"**——transport 可以拿到，早期结论已修正 |
-| **Qoder 国际版** | 账号处于 p3 排队（`throttled`, `serviceAvailable:false`），属账号侧条件，非代码问题 |
-| **Trae 国际版** | 需用户在 Trae 国际版客户端登录，非代码工作。未登录时面板会列出扫描过的凭据位置与失败原因 |
+| **Qoder 国际版对话** | 账号处于 p3 排队（`throttled`, `isQueued:true`, `serviceAvailable:false`）。模型/额度/签到都正常，属账号侧条件，**非代码问题** |
+| **Trae 国际版** | 未登录国际版客户端，当前只服务兜底花名册；对话会返回 `Internal shim error`（因为拿到的是 fallback 表里的模型名，上游不认）。需在该客户端登录，非代码工作 |
 | **WorkBuddy 国际版额度** | 本机缺 `WORKBUDDY_AI_ELECTRON_BIN`，`fetchCredits` 直接报错。面板如实显示该错误，不编造 |
 | **WorkBuddy 国际版模型可见性** | 其凭据无 uid，按源设计**不提供按账号偏好**（避免多个账号共用一个桶）。面板因此不显示开关，这是刻意的降级 |
 | **探针清空 / 最大上下文开关** | 仍返回明确失败原因。`clear` 需要先定交互语义（清谁的、全清还是单模型） |
@@ -479,19 +488,6 @@ f17378d feat(panel): add panel API skeleton with health endpoint
 | **Trae raw chat 通道** | 默认 `enabled:false`，且 `resolveTraeRawRuntime` 依赖外部 `sqlite3`（Windows 通常没有）。刻意不移植 |
 | **认证** | 面板不设登录（本机 loopback 自用） |
 | **UPSTREAM 变化** | 各上游协议随时可能变；插件升级后需同步 `shims/` |
-
-### Qoder 接入的下一步（若要把对话也打通）
-
-已经确定的部分：transport 可加载、凭据可读、模型/额度/签到全部可用。
-**只差对话请求的最终形态**。排查入口：
-
-1. 上游错误是 `Qoder service returned upstream error status 400: invalid_parameter_error: is not one of ['system','assistant','user','tool','function']`——即 Qoder 侧认为某个 **role 值非法**，但发出去的消息里 role 只有 `user`（已确认桩会补 role）。
-2. 发给上游的 `agent_chat_generation` body 是**编码过的**（URL 里带 `Encode=1`），不能用普通 JSON 比对。要看真实 payload 得解它的编码。
-3. 对照基准：DSH 插件自己跑这条路径是正常的，说明差异在**注入的依赖桩**（`@deepseek-ai/dsh-llm` 的 `createUserMessage` 等），优先怀疑桩构造出的消息形状与真实实现仍有偏差（例如真实的可能还有 `id`/`timestamp` 等字段）。
-
-> ⚠️ 排查这类问题时**不要相信 transport 返回的 message**：它把非 `LlmError` 的异常统一包装成
-> `TypeError: Cannot read properties of undefined (reading 'status')` + 502，真实原因被完全掩盖。
-> 要看真实错误，得直接驱动 `transport.stream()` 或包一层 logger。
 
 ---
 
