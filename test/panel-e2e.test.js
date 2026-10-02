@@ -16,13 +16,13 @@ async function gatewayUp() {
 const up = await gatewayUp();
 const opts = up ? {} : { skip: '网关未运行（先 node src/server.mjs）' };
 
-test('health lists four channels', opts, async () => {
+test('health lists six channels', opts, async () => {
   const r = await fetch(`${BASE}/panel/api/health`);
   const j = await r.json();
   assert.equal(j.ok, true);
-  assert.equal(j.providers.length, 4);
+  assert.equal(j.providers.length, 6);
   const prefixes = j.providers.map((p) => p.prefix).sort();
-  assert.deepEqual(prefixes, ['trae', 'traeg', 'wb', 'wbai']);
+  assert.deepEqual(prefixes, ['qoder', 'qoderg', 'trae', 'traeg', 'wb', 'wbai']);
 });
 
 test('trae document has both regions and no credential leak', opts, async () => {
@@ -56,10 +56,15 @@ test('workbuddy control returns explicit state, never silent success', opts, asy
   if (j.state === 'failed') assert.ok(typeof j.reason === 'string' && j.reason.length > 0);
 });
 
-test('qoder reports not-implemented', opts, async () => {
+test('qoder reports both variants with real data', opts, async () => {
   const r = await fetch(`${BASE}/panel/api/qoder`);
   const j = await r.json();
-  assert.equal(j.status, 'not-implemented');
+  assert.ok(j.variants, 'expected a variants document');
+  const cn = j.variants.cn;
+  assert.equal(cn.status, 'signed-in');
+  assert.ok(cn.models.length > 0, 'Qoder CN should list models');
+  // 凭据来源只允许 patTail 这类展示信息，不得出现完整 PAT
+  assert.equal(JSON.stringify(cn).includes('"pat":"'), false);
 });
 
 test('panel HTML is served', opts, async () => {

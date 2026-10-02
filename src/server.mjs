@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTraeProvider } from './providers/trae.mjs';
 import { createWorkBuddyProvider } from './providers/workbuddy.mjs';
+import { createQoderProvider } from './providers/qoder.mjs';
 import { createPanelApi } from './panel/api.mjs';
 import { createStaticHandler } from './panel/static.mjs';
 
@@ -22,6 +23,9 @@ const PROVIDERS = [
   { kind: 'trae', prefix: 'traeg', label: 'Trae 国际版', build: () => createTraeProvider('ai') },
   { kind: 'workbuddy', prefix: 'wb', label: 'WorkBuddy 国内版', build: () => createWorkBuddyProvider('cn') },
   { kind: 'workbuddy', prefix: 'wbai', label: 'WorkBuddy 国际版', build: () => createWorkBuddyProvider('global') },
+  // Qoder 的 build 是 async：transport 要从包内未导出的路径动态加载
+  { kind: 'qoder', prefix: 'qoder', label: 'Qoder 国内版', build: () => createQoderProvider('cn') },
+  { kind: 'qoder', prefix: 'qoderg', label: 'Qoder 国际版', build: () => createQoderProvider('global') },
 ];
 
 const state = { providers: [], ready: false, errors: [] };
@@ -320,7 +324,8 @@ async function boot() {
   for (const def of PROVIDERS) {
     const entry = { def, provider: null, shim: null, models: [], error: undefined };
     try {
-      const provider = def.build();
+      // await 对同步工厂无害，Qoder 的工厂是 async（动态加载未导出的 transport）
+      const provider = await def.build();
       await provider.start();
       entry.provider = provider;
       entry.shim = provider.shim;

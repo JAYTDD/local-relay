@@ -28,4 +28,7 @@ export const api = {
     req('POST', `/panel/api/workbuddy/control?variant=${encodeURIComponent(variant)}`, action),
   postWorkBuddyProbe: (variant, model) =>
     req('POST', `/panel/api/workbuddy/probe?variant=${encodeURIComponent(variant)}`, { model }),
+  postQoderRefresh: (variant) => req('POST', `/panel/api/qoder/refresh?variant=${encodeURIComponent(variant)}`),
+  postQoderProbe: (variant, model) =>
+    req('POST', `/panel/api/qoder/probe?variant=${encodeURIComponent(variant)}`, { model }),
 };

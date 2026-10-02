@@ -43,11 +43,14 @@ test('unknown panel path is not handled', async () => {
   assert.equal(handled, false);
 });
 
-test('GET /panel/api/qoder reports not-implemented', async () => {
+test('GET /panel/api/qoder lists both variants', async () => {
   const api = createPanelApi({ providers: fakeProviders });
   const res = makeRes();
   const handled = await api.handle({ method: 'GET', url: '/panel/api/qoder', headers: {} }, res, '/panel/api/qoder');
   assert.equal(handled, true);
   const body = JSON.parse(res.body);
-  assert.equal(body.status, 'not-implemented');
+  // fakeProviders 里没有 qoder 前缀，所以两个变体都应是"未配置"
+  assert.ok(body.variants);
+  assert.deepEqual(Object.keys(body.variants).sort(), ['cn', 'global']);
+  assert.equal(body.variants.cn.status, 'signed-out');
 });

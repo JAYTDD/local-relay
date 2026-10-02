@@ -51,6 +51,18 @@ export default function App() {
     return out;
   }, [loadWb]);
 
+  const refreshQoder = useCallback(async (variant) => {
+    const out = await api.postQoderRefresh(variant);
+    await loadQoder();
+    return out;
+  }, [loadQoder]);
+
+  const probeQoder = useCallback(async (variant, model) => {
+    const out = await api.postQoderProbe(variant, model);
+    await loadQoder();
+    return out;
+  }, [loadQoder]);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -62,7 +74,7 @@ export default function App() {
         <ChannelHealth health={health} />
         <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={checkinTrae} />
         <WorkBuddyCard data={wb} onControl={controlWb} onProbe={probeWb} />
-        <QoderCard data={qoder} />
+        <QoderCard data={qoder} onRefresh={refreshQoder} onProbe={probeQoder} />
       </main>
     </div>
   );

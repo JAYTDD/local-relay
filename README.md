@@ -61,10 +61,10 @@ npm run start:full
 
 | 区块 | 说明 |
 |---|---|
-| 网关总览 | 四个通道的模型数与就绪状态 |
+| 网关总览 | 六个通道的模型数与就绪状态 |
 | Trae | 国内版 / 国际版切换、**额度（含权益包明细）**、**签到状态与一键领取**、模型列表与上下文窗口；未登录时列出扫描过的凭据位置与原因 |
 | WorkBuddy | 国内版 / 国际版切换、**额度（剩余总额 + 分包）**、**目录来源**、**推理探针**、**模型显示/隐藏开关**、模型倍率与免费标记、刷新模型 |
-| Qoder | 占位（待 `qoderclicn` 登录后接入） |
+| Qoder | 国内版 / 国际版切换、**额度（含额度包）**、**签到状态**、**推理探针**、模型表（上下文 / 推理档位 / 图片 / 倍率）、刷新模型、凭据来源（只显示尾号） |
 
 面板 API 挂在 `/panel/api/*`，只读接口不含任何凭据字段。
 
@@ -93,7 +93,7 @@ probe.cn.json / probe.global.json              # 推理探针结果
 - `node --test test/*.test.js` 全部通过（71 项）
 - `GET /panel/api/health` 返回 4 个通道
 - 面板 API 响应体不含 accessToken / refreshToken / Bearer 等凭据字段
-- `/panel` 返回 HTML，`/v1/models` 返回 59 个模型
+- `/panel` 返回 HTML，`/v1/models` 返回 90 个模型（6 通道）
 - 流式响应中 `"role"` 仅出现 1 次（流规范化未被面板改动破坏）
 - 实测：Trae 额度 4711.83（8 个权益包）、WorkBuddy 额度 2191（11 个包）、探针探出 `deepseek-v4.1-flash` 支持 low/medium/high/xhigh/max
 

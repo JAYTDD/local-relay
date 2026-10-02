@@ -19,7 +19,8 @@
 | `traeg/` | Trae 国际版 | 需登录国际版客户端 |
 | `wb/` | WorkBuddy 国内版 | ✅ 实测可用（对话 + 工具调用） |
 | `wbai/` | WorkBuddy 国际版 | 模型可列，受账号额度约束 |
-| `qoder/` | Qoder | ❌ 未接入（见"已知限制"） |
+| `qoder/` | Qoder 国内版 | ✅ 模型/额度/签到可用（对话见下） |
+| `qoderg/` | Qoder 国际版 | 账号排队（`throttled`），非代码问题 |
 
 ---
 
@@ -248,6 +249,9 @@ wb/hy4-preview        wb/hy3                wb/hy3-x
 
 **`wbai/`（25 个，需账号额度）** 含 `gpt-6-astra`、`gpt-5.6-*`、`grok-4.7`、`gemini-3.8-flash`、`kimi-k3` 等。
 
+**`qoder/`（14 个）** 上游模型名较抽象：`auto`、`qmodel_latest`、`qmodel_38max`、`qfmodel`、`dmodel`、`gmodel`、`kmodel`、`mmodel` 等。
+**`qoderg/`（17 个）** 另含 `ultimate`、`performance`、`efficient`、`smodel`、`cmodel`。
+
 > 以 `GET /v1/models` 的实际返回为准，上面仅作参考。
 
 ---
@@ -319,6 +323,29 @@ Trae 国际版未登录时启动会失败，`state.providers` 里该项的 `prov
 
 别传第二个 `now`——签名是 `(model) => model`，内部自己取当前时间。无活跃促销时它**原样返回同一个对象**（不是副本），所以可以直接用。
 
+### 坑 9：依赖桩不是"空实现"就够——Qoder 踩了两个
+
+`shims/node_modules/@deepseek-ai/dsh-llm` 是手写桩，早期注释写着"插件仅在注册/适配层引用这些符号，协议路径不调用其逻辑"。**这对 Trae / WorkBuddy 成立，对 Qoder 不成立**，结果连踩两脚：
+
+1. **`ProviderRequestId` 必须是可调用函数**。原桩写成 `{ create: ... }` 对象，而 Qoder 的 transport 直接当函数调（`ProviderRequestId(headers.get('x-request-id'))`）→ 抛 `ProviderRequestId is not a function`。
+2. **`createUserMessage` / `createAssistantMessage` / `createToolResultMessage` 必须补 `role`**。原桩是 `return m ?? {role:...}`，只在参数为 `undefined` 时才补；而调用点传的是 `{content, source}`（**不带 role**），于是每条消息都缺 `role` → 上游回 400 `invalid_parameter_error: is not one of ['system','assistant','user','tool','function']`。
+
+两个都已修（函数式 + 强制补 role），且都保留对象式 `.create` 兼容。
+
+**教训**：桩的"最小"边界要按**实际调用点**确定，不能按注释猜。新增通道时先 `grep` 一下该通道 import 了桩里的哪些符号、怎么用的。
+
+### 坑 10：transport 的错误包装会掩盖真实原因
+
+Qoder 的 `chatStream` 用 `failureResult(error)` 归类失败，但它只认 `LlmError` / `UpstreamRequestError`。**普通 `TypeError` 会落进兜底分支再去读 `.status`**，于是真实原因被替换成：
+
+```
+{"error":{"message":"qoder upstream server (http 502): TypeError: Cannot read properties of undefined (reading 'status')"}}
+```
+
+坑 9 的两个 bug 都是被这层包装盖住的。要看真相必须绕开它：直接驱动 `transport.stream()`，或给 transport 传自己的 `logger`／包一层 `fetch`。
+
+另一个记号：`shim.baseUrl` 和 `shim.token` 对 Qoder 是**函数**（`shim.baseUrl()`），Trae/WorkBuddy 是字符串。
+
 ---
 
 ## 七、测试
@@ -343,7 +370,9 @@ node --test test/*.test.js
 | `panel-workbuddy-catalog.test.js` | 目录落盘与重读、**状态路径隔离**、账号键、促销重算 |
 | `state-dir.test.js` | 状态目录不与 DSH 插件共用、`RELAY_STATE_DIR` 覆盖、幂等建目录 |
 | `panel-static.test.js` | 静态托管、SPA fallback、**路径穿越防护**、缺 dist 提示 |
-| `panel-e2e.test.js` | 端到端验收（4 通道、无泄漏、HTML 可服务） |
+| `panel-e2e.test.js` | 端到端验收（通道数、无泄漏、HTML 可服务） |
+
+> ⚠️ `panel-e2e.test.js` 里有一条断言"health 返回 4 个通道"，加 Qoder 后**需要改成 6**。改通道数时记得同步这个数字，以及 README 里的模型总数。
 
 ### 回归验证清单（改完必做）
 
@@ -372,7 +401,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8790/panel
 
 | 区块 | 内容 |
 |---|---|
-| 网关总览 | 4 通道模型数与就绪状态 |
+| 网关总览 | 6 通道模型数与就绪状态 |
 | Trae | 国内/国际切换、**真实登录态 + 账号 + 令牌到期**、**额度（含权益包明细）**、**签到状态与领取**、模型表（含倍率、上下文窗口）、未登录时列出**扫描过的凭据位置与失败原因** |
 | WorkBuddy | 国内/国际切换、**额度（剩余总额 + 分包明细）**、**目录来源（实时/缓存/兜底）**、**推理探针（候选与逐模型探测）**、**模型可见性开关**、模型表（倍率、免费标记、夜间免费等标签）、刷新模型 |
 | Qoder | 未接入占位 + 前置说明 |
@@ -440,7 +469,8 @@ f17378d feat(panel): add panel API skeleton with health endpoint
 
 | 项 | 说明 |
 |---|---|
-| **Qoder 通道** | `createQoderTransport` / `getMachineId` **未从包导出**，且本机未装 `qoderclicn`。需登录后自行装配 transport |
+| **Qoder 对话通道** | 模型/额度/签到已通；对话请求被上游拒绝（详见坑 9）。**不是"未接入"**——transport 可以拿到，早期结论已修正 |
+| **Qoder 国际版** | 账号处于 p3 排队（`throttled`, `serviceAvailable:false`），属账号侧条件，非代码问题 |
 | **Trae 国际版** | 需用户在 Trae 国际版客户端登录，非代码工作。未登录时面板会列出扫描过的凭据位置与失败原因 |
 | **WorkBuddy 国际版额度** | 本机缺 `WORKBUDDY_AI_ELECTRON_BIN`，`fetchCredits` 直接报错。面板如实显示该错误，不编造 |
 | **WorkBuddy 国际版模型可见性** | 其凭据无 uid，按源设计**不提供按账号偏好**（避免多个账号共用一个桶）。面板因此不显示开关，这是刻意的降级 |
@@ -450,13 +480,18 @@ f17378d feat(panel): add panel API skeleton with health endpoint
 | **认证** | 面板不设登录（本机 loopback 自用） |
 | **UPSTREAM 变化** | 各上游协议随时可能变；插件升级后需同步 `shims/` |
 
-### Qoder 接入的下一步（若要做）
+### Qoder 接入的下一步（若要把对话也打通）
 
-1. 安装 `qoderclicn` 并 `qoderclicn login`
-2. 参考 `~/.dsh/profiles/desktop/node_modules/dsh-qoder-connect/lib/index.js` 里 `createVariantRuntime` 的装配顺序
-3. 自行实现 transport（该函数未导出，可能需要从 `variants-CFI6-cGn.js` 里挖，或直接调用上游）
-4. 新增 `src/providers/qoder.mjs`，在 `server.mjs` 的 `PROVIDERS` 里注册
-5. 把 `src/panel/qoder-status.mjs` 从占位改为真实数据
+已经确定的部分：transport 可加载、凭据可读、模型/额度/签到全部可用。
+**只差对话请求的最终形态**。排查入口：
+
+1. 上游错误是 `Qoder service returned upstream error status 400: invalid_parameter_error: is not one of ['system','assistant','user','tool','function']`——即 Qoder 侧认为某个 **role 值非法**，但发出去的消息里 role 只有 `user`（已确认桩会补 role）。
+2. 发给上游的 `agent_chat_generation` body 是**编码过的**（URL 里带 `Encode=1`），不能用普通 JSON 比对。要看真实 payload 得解它的编码。
+3. 对照基准：DSH 插件自己跑这条路径是正常的，说明差异在**注入的依赖桩**（`@deepseek-ai/dsh-llm` 的 `createUserMessage` 等），优先怀疑桩构造出的消息形状与真实实现仍有偏差（例如真实的可能还有 `id`/`timestamp` 等字段）。
+
+> ⚠️ 排查这类问题时**不要相信 transport 返回的 message**：它把非 `LlmError` 的异常统一包装成
+> `TypeError: Cannot read properties of undefined (reading 'status')` + 502，真实原因被完全掩盖。
+> 要看真实错误，得直接驱动 `transport.stream()` 或包一层 logger。
 
 ---
 

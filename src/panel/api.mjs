@@ -46,7 +46,7 @@ export function createPanelApi(deps) {
   const routes = new Map();
   const traeStatus = createTraeStatus({ providers: deps.providers });
   const wbStatus = createWorkBuddyStatus({ providers: deps.providers });
-  const qoderStatus = createQoderStatus();
+  const qoderStatus = createQoderStatus({ providers: deps.providers });
   routes.set('GET /panel/api/health', (req, res) => json(res, 200, healthDocument(deps.providers())));
   routes.set('GET /panel/api/trae', async (req, res) => {
     const out = {};
@@ -97,7 +97,29 @@ export function createPanelApi(deps) {
     }
     json(res, 200, await wbStatus.probe(variant, body.model));
   });
-  routes.set('GET /panel/api/qoder', async (req, res) => json(res, 200, await qoderStatus.document()));
+  routes.set('GET /panel/api/qoder', async (req, res) => {
+    const out = {};
+    for (const variant of qoderStatus.variants()) {
+      out[variant] = await qoderStatus.document(variant);
+    }
+    json(res, 200, { variants: out });
+  });
+  routes.set('POST /panel/api/qoder/refresh', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    json(res, 200, await qoderStatus.refresh(url.searchParams.get('variant') ?? 'cn'));
+  });
+  routes.set('POST /panel/api/qoder/probe', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const variant = url.searchParams.get('variant') ?? 'cn';
+    const raw = await readRequestBody(req);
+    let body;
+    try {
+      body = JSON.parse(raw || '{}');
+    } catch {
+      return json(res, 400, { error: { message: 'invalid JSON body' } });
+    }
+    json(res, 200, await qoderStatus.probe(variant, body.model));
+  });
 
   return {
     /** 返回 true 表示已处理该请求 */
