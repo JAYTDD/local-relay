@@ -63,12 +63,21 @@ export function createTraeProvider(region) {
   const upstream = new trae.TraeSoloBridge(solo, catalog, wireResolver);
   const delegating = new trae.TraeDelegatingUpstreamClient(upstream);
 
+  // 额度/签到客户端（源 apply() 同款装配）。注入式：credential + deviceId 都由外部提供。
+  // CN 与 AI 的取数契约不同：CN 走 snapshot/checkinStatus，AI 走 payStatus。
+  const usage = new trae.TraeUsageClient({
+    credential: () => store.resolve(),
+    deviceId: async () => (await identity()).deviceId,
+  });
+
   return {
     id: region === 'ai' ? 'trae-global' : 'trae',
     label: region === 'ai' ? 'Trae (国际版)' : 'Trae (国内版)',
     providerPrefix: region === 'ai' ? 'traeg' : 'trae',
     // 供面板查询真实登录态与账号（只读；不暴露 token）
     store,
+    // 供面板查询额度/签到（只读部分；写操作只有 checkin）
+    usage,
     region,
     shim: null, // start() 时填充
     async start() {

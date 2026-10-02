@@ -35,6 +35,48 @@ function toModelRow(m) {
   };
 }
 
+/**
+ * 额度快照 → 面板字段。
+ *
+ * 形状照抄源实现（trae:3823 `toCredits`）：snapshot 是嵌套的，
+ * summary 给总量，packs 按 availableEndpoint 分成 work(1) 与 general(0) 两块可用额度。
+ * 不做白名单裁剪——这里映射出的字段本身已是受控集合。
+ */
+export function toCredits(snapshot) {
+  const round = (value) => Math.round(value * 1e4) / 1e4;
+  const totalAmount = snapshot?.summary?.totalAmount ?? 0;
+  const consumedAmount = snapshot?.summary?.consumedAmount ?? 0;
+  const packs = Array.isArray(snapshot?.packs) ? snapshot.packs : [];
+  const remaining = (endpoint) =>
+    packs
+      .filter((pack) => pack.availableEndpoint === endpoint)
+      .reduce((sum, pack) => round(sum + Math.max(0, (pack.creditsLimit ?? 0) - (pack.consumedCredits ?? 0))), 0);
+  return {
+    total: totalAmount,
+    consumed: consumedAmount,
+    available: totalAmount - consumedAmount,
+    workAvailable: remaining(1),
+    generalAvailable: remaining(0),
+    accounts: packs.map((pack) => ({
+      displayDesc: pack.displayDesc,
+      remain: round(Math.max(0, (pack.creditsLimit ?? 0) - (pack.consumedCredits ?? 0))),
+      size: pack.creditsLimit ?? 0,
+    })),
+  };
+}
+
+/** 签到状态 → 面板字段（形状照抄源实现 trae:3842 `toCheckin`） */
+export function toCheckin(raw) {
+  const extra = raw?.extraCredits;
+  return {
+    checkedIn: raw?.checkedIn === true,
+    didCheckedIn: raw?.didCheckedIn === true,
+    credits: typeof raw?.credits === 'number' ? raw.credits : 0,
+    enabled: raw?.enabled !== false,
+    ...(typeof extra === 'number' && extra > 0 ? { extraCredits: extra } : {}),
+  };
+}
+
 /** 未配置该区域时的文档 */
 export function unconfiguredDocument(region) {
   return {
@@ -91,6 +133,35 @@ export function createTraeStatus({ providers }) {
       const signedIn = statusDoc.state === 'signed-in';
       const selected = accounts.find((a) => a.selected) ?? accounts[0];
 
+      // 额度/签到：CN 与 AI 是两条不同的上游契约（源实现只在 ai 走 payStatus）。
+      // 任何异常降级成 *Error 字段，绝不让整个文档 500。
+      let usageFields = {};
+      const usage = liveProvider.usage;
+      if (!signedIn) {
+        usageFields = {};
+      } else if (!usage) {
+        usageFields = { usageUnavailable: 'usage client not wired' };
+      } else if (region === 'ai') {
+        try {
+          usageFields = { payStatus: await usage.payStatus() };
+        } catch (e) {
+          usageFields = { payStatusError: String(e?.message ?? e) };
+        }
+      } else {
+        const [snapshotResult, checkinResult] = await Promise.allSettled([
+          usage.snapshot(),
+          usage.checkinStatus(),
+        ]);
+        usageFields = {
+          ...(snapshotResult.status === 'fulfilled'
+            ? { credits: toCredits(snapshotResult.value) }
+            : { creditsError: String(snapshotResult.reason?.message ?? snapshotResult.reason) }),
+          ...(checkinResult.status === 'fulfilled'
+            ? { checkin: toCheckin(checkinResult.value) }
+            : { checkinError: String(checkinResult.reason?.message ?? checkinResult.reason) }),
+        };
+      }
+
       return {
         status: signedIn ? 'signed-in' : 'signed-out',
         region,
@@ -105,6 +176,7 @@ export function createTraeStatus({ providers }) {
               tokenExpiresAtMs: selected.tokenExpiresAtMs,
             }
           : {}),
+        ...usageFields,
         models,
         enabledModelIds: models.map((m) => m.id),
       };

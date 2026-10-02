@@ -1,4 +1,5 @@
-# 派生的依赖副本（由 npm run sync:deps 从 shims/node_modules 重建）
+# 派生的依赖副本。shims/node_modules 是入库的核心资产，
+# 这里只是它的副本，靠 npm run sync:deps 重建（别手改 node_modules）。
 /node_modules/
 
 # 前端依赖与构建产物
@@ -8,3 +9,8 @@
 # 运行时与本地临时文件
 *.log
 .DS_Store
+
+# 本地排查残留：ACL 诊断报告与一次性探针脚本
+/.dsh-acl-report/
+/.probe.mjs
+/probe-*.mjs
