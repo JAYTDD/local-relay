@@ -44,3 +44,19 @@ test('control rejects unknown variant', async () => {
   const out = await st.control('bogus', { action: 'clear' });
   assert.equal(out.state, 'failed');
 });
+
+test('document and control survive a provider that failed to start', async () => {
+  const broken = {
+    def: { prefix: 'wbai', label: 'WB global', kind: 'workbuddy' },
+    provider: null,
+    models: [],
+    error: 'boom',
+  };
+  const st = createWorkBuddyStatus({ providers: () => [broken] });
+  const doc = await st.document('global');
+  assert.equal(doc.status, 'signed-out');
+  assert.equal(doc.reason, 'boom');
+  const out = await st.control('global', { action: 'refresh' });
+  assert.equal(out.state, 'failed');
+  assert.equal(out.reason, 'boom');
+});

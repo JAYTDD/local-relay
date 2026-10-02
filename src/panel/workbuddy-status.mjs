@@ -47,7 +47,17 @@ export function createWorkBuddyStatus({ providers }) {
       if (!entry) {
         return { status: 'signed-out', reason: `variant not configured: ${variant}`, models: [] };
       }
-      const models = (entry.provider.models() ?? entry.models ?? []).map(toModelRow);
+      // provider 启动失败时 entry.provider 为 null
+      const liveProvider = entry.provider;
+      if (!liveProvider) {
+        return {
+          status: 'signed-out',
+          variant,
+          models: [],
+          reason: entry.error ?? 'provider unavailable',
+        };
+      }
+      const models = (liveProvider.models?.() ?? entry.models ?? []).map(toModelRow);
       const signedIn = models.length > 0;
       return {
         status: signedIn ? 'signed-in' : 'signed-out',
@@ -60,6 +70,7 @@ export function createWorkBuddyStatus({ providers }) {
     async control(variant, action) {
       const entry = providerFor(providers(), variant);
       if (!entry) return { state: 'failed', reason: `variant not configured: ${variant}` };
+      if (!entry.provider) return { state: 'failed', reason: entry.error ?? 'provider unavailable' };
       const kind = action?.action;
       if (kind === 'refresh') {
         try {

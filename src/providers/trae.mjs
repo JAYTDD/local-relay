@@ -67,6 +67,9 @@ export function createTraeProvider(region) {
     id: region === 'ai' ? 'trae-global' : 'trae',
     label: region === 'ai' ? 'Trae (国际版)' : 'Trae (国内版)',
     providerPrefix: region === 'ai' ? 'traeg' : 'trae',
+    // 供面板查询真实登录态与账号（只读；不暴露 token）
+    store,
+    region,
     shim: null, // start() 时填充
     async start() {
       const shim = trae.createTraeShim({ catalog, client: delegating, logger });

@@ -30,7 +30,8 @@ function CreditsBlock({ doc }) {
   if (doc.creditsError) return <p className="muted small">额度读取失败：{doc.creditsError}</p>;
   if (doc.payStatus) return <p className="muted small">订阅状态已获取（国际版不提供积分明细）</p>;
   if (doc.payStatusError) return <p className="muted small">订阅状态读取失败：{doc.payStatusError}</p>;
-  return <p className="muted small">未登录或无额度数据</p>;
+  // 账号可能已登录，只是额度客户端未装配——措辞不要误报为"未登录"
+  return <p className="muted small">额度信息不可用（用量客户端尚未装配）</p>;
 }
 
 function CheckinBlock({ doc, region, onCheckin }) {

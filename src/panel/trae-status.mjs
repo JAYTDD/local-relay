@@ -3,17 +3,18 @@
  *
  * 原插件的 /plugins/dsh-connect-trae/usage 由 traeWebUsage(deps, region) 组装，
  * deps 需要 store / client / displayModels / enabledModelIds / regionEnabled /
- * discoverModels / rawDiagnostic 这一整套服务。
+ * discoverModels / rawDiagnostic 一整套服务。
  *
- * local-relay 的 provider 目前只暴露 { id, shim, models(), refreshModels() }，
- * **没有** store / usageClient —— 因此本模块的契约是：
- *   - 一律返回 signed-out 形态的文档（含账号为空、模型来自 provider.models()）；
- *   - 不去调用 traeWebUsage（缺依赖必然抛错，包一层 try/catch 只是掩盖问题）；
- *   - 当后续任务把 store/client 装配到 provider 上时，只需把 buildLiveDocument
- *     的分支打开即可，调用点与返回契约不变。
+ * local-relay 的 provider 暴露了 { store, region, models(), refreshModels() }。
+ * 本模块据此给出**真实**的登录态与账号信息（只读，不含 token）：
+ *   - 登录态：store.status() → { state, edition, expiresAtMs, source }
+ *   - 账号：  store.accounts() → [{ id, accountName, edition, region, tokenExpiresAtMs, selected }]
+ *   - 额度/签到：需要 TraeUsageClient（未装配），因此明确留空而非编造。
  *
- * 这样面板在"未登录/依赖不全"时显示账号与模型，而不是整块报错。
+ * 注意：早期版本一律返回 signed-out，导致已登录的 Trae CN 被误报为"未登录"。
+ * 面板必须反映真实状态，不能凭"依赖不全"就声称未登录。
  */
+
 const REGIONS = ['cn', 'ai'];
 
 const PREFIX_BY_REGION = { cn: 'trae', ai: 'traeg' };
@@ -22,34 +23,29 @@ function providerFor(providers, region) {
   return providers.find((p) => p.def.prefix === PREFIX_BY_REGION[region]);
 }
 
-/** 未登录/依赖不全时的文档；模型从 provider 本地目录读 */
-export function fallbackDocument(provider, region) {
-  const models = (provider?.models ?? []).map((m) => ({
+/** 归一化模型行 */
+function toModelRow(m) {
+  return {
     id: m.id,
     name: m.name ?? m.id,
     ...(m.contextWindow === undefined ? {} : { contextWindow: m.contextWindow }),
     ...(m.maxTokens === undefined ? {} : { maxTokens: m.maxTokens }),
-  }));
-  return {
-    status: 'signed-out',
-    region,
-    enabled: Boolean(provider),
-    accounts: [],
-    models,
-    enabledModelIds: models.map((m) => m.id),
-    ...(provider ? {} : { reason: `region not configured: ${region}` }),
+    ...(Array.isArray(m.input) ? { input: m.input } : {}),
+    ...(typeof m.creditMultiplier === 'number' ? { creditMultiplier: m.creditMultiplier } : {}),
   };
 }
 
-/**
- * 当且仅当 provider 上装配了 store + 用量客户端时才走完整文档。
- * 本计划的 provider 未装配，故恒走 fallback；保留此分支供后续任务接入。
- */
-export function buildLiveDocument(provider) {
-  const hasLiveServices = Boolean(provider?.usageClient) && Boolean(provider?.store);
-  if (!hasLiveServices) return undefined;
-  // 装配后在此调用 traeWebUsage；当前不实现，避免引入未定义的依赖。
-  return undefined;
+/** 未配置该区域时的文档 */
+export function unconfiguredDocument(region) {
+  return {
+    status: 'signed-out',
+    region,
+    enabled: false,
+    accounts: [],
+    models: [],
+    enabledModelIds: [],
+    reason: `region not configured: ${region}`,
+  };
 }
 
 export function createTraeStatus({ providers }) {
@@ -60,9 +56,58 @@ export function createTraeStatus({ providers }) {
 
     async document(region) {
       const entry = providerFor(providers(), region);
-      if (!entry) return fallbackDocument(undefined, region);
-      const live = buildLiveDocument(entry.provider);
-      return live ?? fallbackDocument(entry, region);
+      if (!entry) return unconfiguredDocument(region);
+
+      // provider 启动失败时 entry.provider 为 null；此时仍要返回结构完整的文档
+      const liveProvider = entry.provider;
+      const models = (liveProvider?.models?.() ?? entry.models ?? []).map(toModelRow);
+      const store = liveProvider?.store;
+
+      if (!liveProvider) {
+        return {
+          ...unconfiguredDocument(region),
+          enabled: false,
+          models,
+          enabledModelIds: models.map((m) => m.id),
+          ...(entry.error === undefined ? {} : { reason: entry.error }),
+        };
+      }
+
+      // 查询真实登录态；任何异常都退化为 signed-out 但带上原因
+      let statusDoc = { state: 'signed-out' };
+      let accounts = [];
+      let reason;
+      try {
+        if (store) {
+          statusDoc = (await store.status()) ?? { state: 'signed-out' };
+          accounts = await store.accounts();
+        } else {
+          reason = 'credential store not wired';
+        }
+      } catch (e) {
+        reason = String(e?.message ?? e);
+      }
+
+      const signedIn = statusDoc.state === 'signed-in';
+      const selected = accounts.find((a) => a.selected) ?? accounts[0];
+
+      return {
+        status: signedIn ? 'signed-in' : 'signed-out',
+        region,
+        enabled: true,
+        ...(signedIn ? {} : { reason: reason ?? statusDoc.reason ?? 'no credential' }),
+        ...(statusDoc.reasonCode === undefined ? {} : { reasonCode: statusDoc.reasonCode }),
+        accounts,
+        ...(selected
+          ? {
+              accountId: selected.id,
+              accountName: selected.accountName,
+              tokenExpiresAtMs: selected.tokenExpiresAtMs,
+            }
+          : {}),
+        models,
+        enabledModelIds: models.map((m) => m.id),
+      };
     },
 
     async refresh(region) {

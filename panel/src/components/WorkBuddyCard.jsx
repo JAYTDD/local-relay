@@ -62,7 +62,7 @@ export default function WorkBuddyCard({ data, onControl }) {
           <h3 className="sub">额度</h3>
           {doc.credits
             ? <pre className="json small">{JSON.stringify(doc.credits, null, 2)}</pre>
-            : <p className="muted small">{doc.creditsError ? `读取失败：${doc.creditsError}` : '未登录或无额度数据'}</p>}
+            : <p className="muted small">{doc.creditsError ? `读取失败：${doc.creditsError}` : '额度信息不可用（额度客户端尚未装配）'}</p>}
 
           <h3 className="sub">模型（{(doc.models ?? []).length}）</h3>
           <ModelTable
