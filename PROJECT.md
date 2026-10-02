@@ -82,13 +82,14 @@ ZCode / 任意 OpenAI 客户端
 local-relay/
 ├── src/
 │   ├── server.mjs              # 统一入口：前缀路由 + 流规范化 + 静态托管
+│   ├── state-dir.mjs           # 持久化状态目录（与 DSH 插件隔离，见第八节）
 │   ├── providers/
-│   │   ├── trae.mjs            # Trae 栈装配（cn / ai 两区域）
-│   │   └── workbuddy.mjs       # WorkBuddy 栈装配（cn / global 两变体）
+│   │   ├── trae.mjs            # Trae 栈装配（cn / ai 两区域）+ 死模型过滤
+│   │   └── workbuddy.mjs       # WorkBuddy 栈装配（cn / global 两变体）+ 目录/可见性/探针
 │   └── panel/
 │       ├── api.mjs             # /panel/api/* 路由编排
-│       ├── trae-status.mjs     # Trae 面板数据（真实登录态 + 账号）
-│       ├── workbuddy-status.mjs# WorkBuddy 面板数据
+│       ├── trae-status.mjs     # Trae 面板数据（登录态 + 额度 + 签到 + 诊断）
+│       ├── workbuddy-status.mjs# WorkBuddy 面板数据（额度 + 目录 + 可见性 + 探针）
 │       ├── qoder-status.mjs    # Qoder 占位
 │       └── static.mjs          # 托管 Vite 产物（含 SPA fallback）
 ├── scripts/
@@ -300,13 +301,23 @@ Trae 国际版未登录时启动会失败，`state.providers` 里该项的 `prov
 
 ### 坑 6：写操作绝不静默成功
 
-未装配的能力（探针清空、模型启停、签到领取）统一返回：
+未装配的能力（探针清空、最大上下文开关、账号切换）统一返回：
 
 ```json
-{ "state": "failed", "reason": "action not wired yet: clear (needs probe/visibility service)" }
+{ "state": "failed", "reason": "action not wired yet: ..." }
 ```
 
 **这是刻意设计**——proxy-hub 的致命问题之一就是把失败静默成"空成功"。新增写操作时不要破坏这个约定。
+
+### 坑 7：探针服务的 `account` 回调必须是同步的
+
+`WorkBuddyProbeService` 把 `account()` 的返回值当 **Map 键**用，并做 `account() !== account` 的**恒等比较**（源 `index.js:1071/1100/1116`）。传一个 `async` 函数会让两次调用返回两个不同的 Promise，恒等比较永远为真，于是**每次探测都报 `account changed before detection`**、永远写不进记录。
+
+正确做法（照插件）：异步解析一次凭据后把账号键**缓存**下来，`account` 是同步 getter。local-relay 在 `start()` / `refreshModels()` 里调 `refreshAccount()` 刷新缓存。
+
+### 坑 8：`modelWithCurrentPromotion` 只接受一个参数
+
+别传第二个 `now`——签名是 `(model) => model`，内部自己取当前时间。无活跃促销时它**原样返回同一个对象**（不是副本），所以可以直接用。
 
 ---
 
@@ -317,7 +328,7 @@ cd D:\ProjectSave\local-relay
 node --test test/*.test.js
 ```
 
-当前 **26 项全绿**。其中 `test/panel-e2e.test.js` 需要网关在跑，否则自动 skip。
+当前 **71 项全绿**。其中 `test/panel-e2e.test.js` 需要网关在跑，否则自动 skip。
 
 测试覆盖：
 
@@ -325,7 +336,12 @@ node --test test/*.test.js
 |---|---|
 | `panel-api.test.js` | 面板 API 骨架、健康度、Qoder 占位 |
 | `panel-trae-status.test.js` | Trae 真实登录态、账号、无凭据泄漏、失效 provider |
+| `panel-trae-usage.test.js` | Trae 额度映射（嵌套 summary + packs）、签到、诊断、无泄漏 |
+| `panel-trae-checkin.test.js` | 签到**先读后写守卫**、业务拒绝 vs 网络失败、AI 区域拒绝、路由 |
+| `trae-catalog.test.js` | `sanitizeCatalog`/`deriveCatalog` 行为、**`dropDeadModels` 死模型剔除** |
 | `panel-workbuddy-status.test.js` | 模型倍率归一化、写操作拒绝、失效 provider |
+| `panel-workbuddy-catalog.test.js` | 目录落盘与重读、**状态路径隔离**、账号键、促销重算 |
+| `state-dir.test.js` | 状态目录不与 DSH 插件共用、`RELAY_STATE_DIR` 覆盖、幂等建目录 |
 | `panel-static.test.js` | 静态托管、SPA fallback、**路径穿越防护**、缺 dist 提示 |
 | `panel-e2e.test.js` | 端到端验收（4 通道、无泄漏、HTML 可服务） |
 
@@ -335,7 +351,7 @@ node --test test/*.test.js
 # 1. 全量测试
 node --test test/*.test.js
 
-# 2. 模型总数（应 56）
+# 2. 模型总数（2026-10 实测 59：trae 15 + traeg 7 + wb 17 + wbai 20）
 curl -s http://127.0.0.1:8790/v1/models | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).data.length))"
 
 # 3. 流规范化未被破坏（应输出 1）
@@ -357,15 +373,37 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8790/panel
 | 区块 | 内容 |
 |---|---|
 | 网关总览 | 4 通道模型数与就绪状态 |
-| Trae | 国内/国际切换、**真实登录态 + 账号 + 令牌到期**、模型表（含倍率、上下文窗口） |
-| WorkBuddy | 国内/国际切换、模型表（倍率、免费标记、夜间免费等标签）、刷新模型 |
+| Trae | 国内/国际切换、**真实登录态 + 账号 + 令牌到期**、**额度（含权益包明细）**、**签到状态与领取**、模型表（含倍率、上下文窗口）、未登录时列出**扫描过的凭据位置与失败原因** |
+| WorkBuddy | 国内/国际切换、**额度（剩余总额 + 分包明细）**、**目录来源（实时/缓存/兜底）**、**推理探针（候选与逐模型探测）**、**模型可见性开关**、模型表（倍率、免费标记、夜间免费等标签）、刷新模型 |
 | Qoder | 未接入占位 + 前置说明 |
 
 ### 面板架构
 
-- 后端：`/panel/api/*` 路由，复用插件 host 端导出的函数（`normalizeCredits` 等）
+- 后端：`/panel/api/*` 路由，复用插件 host 端导出的类与函数（`normalizeCredits`、`modelWithCurrentPromotion` 等）
 - 前端：React + Vite，产物由同一 server 托管在 `/panel`（不另起端口，免 CORS）
 - **面板 API 响应体绝不含凭据**（只允许 `accountName`、`tokenExpiresAtMs` 这类非敏感字段）
+
+### 面板写操作
+
+| 操作 | 路由 | 语义 |
+|---|---|---|
+| Trae 签到领取 | `POST /panel/api/trae/checkin?region=cn` | **先读后写**：已签/未开启一律不打上游。业务拒绝以 `code` 非零返回（`claimed:false`），网络失败才是 `failed` |
+| WorkBuddy 模型启停 | `POST /panel/api/workbuddy/control` `{action:'set-model-visibility', model, visible}` | 按账号维度；重新显示最后一个隐藏模型会整条删除该账号记录 |
+| WorkBuddy 推理探针 | `POST /panel/api/workbuddy/probe` `{model}` | 会**真发上游请求并消耗额度**。自动探测不授权（`consent: () => false`），面板点击走 `manualConsent=true` 的一次性同意 |
+
+### 状态文件隔离（改动前必读）
+
+local-relay 自己的持久化状态放在 **`~/.dsh/local-relay/`**（`RELAY_STATE_DIR` 可覆盖），**不用** `workbuddyCatalogPath()` 等默认值：
+
+```
+~/.dsh/local-relay/catalog.<variant>.json      # 上次成功拉取的模型目录
+~/.dsh/local-relay/visibility.<variant>.json   # 按账号的模型隐藏名单
+~/.dsh/local-relay/probe.<variant>.json        # 推理探针观测记录
+```
+
+**为什么必须隔离**：DSH 插件用同名文件写 `~/.dsh`（`.workbuddy-catalog.json` 等），而几个 store 的 `persist()` 是**全量覆盖写**——读整个文件 → 改一处 → 写回。两个进程同时跑会互相把对方的改动整段抹掉；格式版本演进时还会互相判为旧格式而读成空，把对方数据清空落盘。改动时**不要**把这些 store 改回默认路径。
+
+**例外**：Trae 的凭据副本（`~/.dsh/.trae-auth.<region>.json`）与 DSH 插件共享是**期望行为**——两边都该复用同一份登录态，本地网关的意义就在这里。
 
 ### 为什么面板是重写的，不是从插件移植的
 
@@ -403,10 +441,12 @@ f17378d feat(panel): add panel API skeleton with health endpoint
 | 项 | 说明 |
 |---|---|
 | **Qoder 通道** | `createQoderTransport` / `getMachineId` **未从包导出**，且本机未装 `qoderclicn`。需登录后自行装配 transport |
-| **Trae 国际版** | 需用户在 Trae 国际版客户端登录，非代码工作 |
-| **额度明细** | 需要 `TraeUsageClient` / WorkBuddy credits 客户端装配。当前面板显示"额度信息不可用（用量客户端尚未装配）" |
-| **签到领取** | 只读展示状态，按钮未触发写操作 |
-| **模型启停 / 探针清空** | 写操作返回明确失败原因，未实现持久化 |
+| **Trae 国际版** | 需用户在 Trae 国际版客户端登录，非代码工作。未登录时面板会列出扫描过的凭据位置与失败原因 |
+| **WorkBuddy 国际版额度** | 本机缺 `WORKBUDDY_AI_ELECTRON_BIN`，`fetchCredits` 直接报错。面板如实显示该错误，不编造 |
+| **WorkBuddy 国际版模型可见性** | 其凭据无 uid，按源设计**不提供按账号偏好**（避免多个账号共用一个桶）。面板因此不显示开关，这是刻意的降级 |
+| **探针清空 / 最大上下文开关** | 仍返回明确失败原因。`clear` 需要先定交互语义（清谁的、全清还是单模型） |
+| **Trae 账号切换** | 面板只读展示选中账号。切换属真写操作，需先想清多账号并存语义 |
+| **Trae raw chat 通道** | 默认 `enabled:false`，且 `resolveTraeRawRuntime` 依赖外部 `sqlite3`（Windows 通常没有）。刻意不移植 |
 | **认证** | 面板不设登录（本机 loopback 自用） |
 | **UPSTREAM 变化** | 各上游协议随时可能变；插件升级后需同步 `shims/` |
 

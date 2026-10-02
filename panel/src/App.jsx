@@ -45,6 +45,12 @@ export default function App() {
     return out;
   }, [loadWb]);
 
+  const probeWb = useCallback(async (variant, model) => {
+    const out = await api.postWorkBuddyProbe(variant, model);
+    await loadWb();
+    return out;
+  }, [loadWb]);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -55,7 +61,7 @@ export default function App() {
       <main className="app-body">
         <ChannelHealth health={health} />
         <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={checkinTrae} />
-        <WorkBuddyCard data={wb} onControl={controlWb} />
+        <WorkBuddyCard data={wb} onControl={controlWb} onProbe={probeWb} />
         <QoderCard data={qoder} />
       </main>
     </div>

@@ -62,19 +62,40 @@ npm run start:full
 | 区块 | 说明 |
 |---|---|
 | 网关总览 | 四个通道的模型数与就绪状态 |
-| Trae | 国内版 / 国际版切换、额度、签到、模型列表与上下文窗口 |
-| WorkBuddy | 国内版 / 国际版切换、额度、模型倍率与免费标记、刷新模型 |
+| Trae | 国内版 / 国际版切换、**额度（含权益包明细）**、**签到状态与一键领取**、模型列表与上下文窗口；未登录时列出扫描过的凭据位置与原因 |
+| WorkBuddy | 国内版 / 国际版切换、**额度（剩余总额 + 分包）**、**目录来源**、**推理探针**、**模型显示/隐藏开关**、模型倍率与免费标记、刷新模型 |
 | Qoder | 占位（待 `qoderclicn` 登录后接入） |
 
 面板 API 挂在 `/panel/api/*`，只读接口不含任何凭据字段。
 
+**会真的做事的三个按钮**：
+
+- Trae「领取签到」——已签或未开启时**不会**打上游；每天只能领一次
+- WorkBuddy「模型可见开关」——按账号持久化，重启后仍生效
+- WorkBuddy「探针」——**会真发上游请求并消耗额度**，逐个模型点击触发
+
+## 状态文件放哪
+
+local-relay 自己的状态放在 `~/.dsh/local-relay/`：
+
+```
+catalog.cn.json / catalog.global.json          # 上次拉取的模型目录
+visibility.cn.json / visibility.global.json    # 模型隐藏名单
+probe.cn.json / probe.global.json              # 推理探针结果
+```
+
+**刻意与 DSH 插件分开放**：插件用同名文件写 `~/.dsh`，而双方都是整文件覆盖写，同跑会互相抹掉。想换位置就设 `RELAY_STATE_DIR`。
+
+（Trae 的凭据副本 `~/.dsh/.trae-auth.<区域>.json` 是**共享**的，这是有意的——两边复用同一份登录态。）
+
 ### 验收记录
 
-- `node --test test/*.test.js` 全部通过（22 项）
+- `node --test test/*.test.js` 全部通过（71 项）
 - `GET /panel/api/health` 返回 4 个通道
 - 面板 API 响应体不含 accessToken / refreshToken / Bearer 等凭据字段
-- `/panel` 返回 HTML，`/v1/models` 仍返回 56 个模型
+- `/panel` 返回 HTML，`/v1/models` 返回 59 个模型
 - 流式响应中 `"role"` 仅出现 1 次（流规范化未被面板改动破坏）
+- 实测：Trae 额度 4711.83（8 个权益包）、WorkBuddy 额度 2191（11 个包）、探针探出 `deepseek-v4.1-flash` 支持 low/medium/high/xhigh/max
 
 ## 接入 ZCode
 

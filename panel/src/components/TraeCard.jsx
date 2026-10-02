@@ -17,21 +17,36 @@ function expiry(ms) {
 
 function CreditsBlock({ doc }) {
   if (doc.credits) {
+    const packs = doc.credits.accounts ?? [];
+    const live = packs.filter((p) => p.remain > 0);
     return (
-      <div className="kv-grid">
-        <div><span className="k">总额度</span><span className="v">{num(doc.credits.total)}</span></div>
-        <div><span className="k">已用</span><span className="v">{num(doc.credits.consumed)}</span></div>
-        <div><span className="k">剩余</span><span className="v">{num(doc.credits.available)}</span></div>
-        <div><span className="k">Work 可用</span><span className="v">{num(doc.credits.workAvailable)}</span></div>
-        <div><span className="k">通用可用</span><span className="v">{num(doc.credits.generalAvailable)}</span></div>
-      </div>
+      <>
+        <div className="kv-grid">
+          <div><span className="k">总额度</span><span className="v">{num(doc.credits.total)}</span></div>
+          <div><span className="k">已用</span><span className="v">{num(doc.credits.consumed)}</span></div>
+          <div><span className="k">剩余</span><span className="v">{num(doc.credits.available)}</span></div>
+          <div><span className="k">Work 可用</span><span className="v">{num(doc.credits.workAvailable)}</span></div>
+          <div><span className="k">通用可用</span><span className="v">{num(doc.credits.generalAvailable)}</span></div>
+        </div>
+        {live.length > 0 && (
+          <details className="details">
+            <summary className="muted small">查看权益包明细（有余额 {live.length} / 共 {packs.length}）</summary>
+            <ul className="small muted">
+              {live.map((p, i) => (
+                <li key={i}>{p.displayDesc || '（未命名）'} — 剩余 {num(p.remain)} / {num(p.size)}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </>
     );
   }
   if (doc.creditsError) return <p className="muted small">额度读取失败：{doc.creditsError}</p>;
   if (doc.payStatus) return <p className="muted small">订阅状态已获取（国际版不提供积分明细）</p>;
   if (doc.payStatusError) return <p className="muted small">订阅状态读取失败：{doc.payStatusError}</p>;
-  // 账号可能已登录，只是额度客户端未装配——措辞不要误报为"未登录"
-  return <p className="muted small">额度信息不可用（用量客户端尚未装配）</p>;
+  if (doc.usageUnavailable) return <p className="muted small">额度信息不可用（{doc.usageUnavailable}）</p>;
+  // 未登录时额度字段本来就为空，措辞不要误报为"客户端没装配"
+  return <p className="muted small">登录后显示额度</p>;
 }
 
 function CheckinBlock({ doc, region, onCheckin }) {
