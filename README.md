@@ -2,6 +2,9 @@
 
 把 **DSH 三个订阅接入插件**（`dsh-connect-trae` / `dsh-workbuddy-connect` / `dsh-qoder-connect`）的**协议层提取出来**，做成一个不依赖 DSH、可独立运行的本地 **OpenAI 兼容网关**，供 ZCode 等任意支持自定义 OpenAI 接口的客户端使用。
 
+> 📘 **接手/维护本项目请先读 [PROJECT.md](PROJECT.md)** —— 架构、设计决策、已知的坑、测试与回归清单都在那里。
+> 本 README 只讲怎么用。
+
 ## 为什么是这个方案
 
 这三个插件内部**本身就各自带一个 OpenAI 兼容的 loopback 网关**（`createTraeShim` / `createWorkBuddyShim` / `createQoderShim`，暴露 `/healthz`、`/v1/models`、`/v1/chat/completions`），DSH 的 pi-ai provider 只是它的一个客户端。
