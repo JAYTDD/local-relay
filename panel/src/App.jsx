@@ -33,6 +33,12 @@ export default function App() {
     await loadTrae();
   }, [loadTrae]);
 
+  const checkinTrae = useCallback(async (region) => {
+    const out = await api.postTraeCheckin(region);
+    await loadTrae();
+    return out;
+  }, [loadTrae]);
+
   const controlWb = useCallback(async (variant, action) => {
     const out = await api.postWorkBuddyControl(variant, action);
     await loadWb();
@@ -48,7 +54,7 @@ export default function App() {
       {error && <div className="banner err">{error}</div>}
       <main className="app-body">
         <ChannelHealth health={health} />
-        <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={() => {}} />
+        <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={checkinTrae} />
         <WorkBuddyCard data={wb} onControl={controlWb} />
         <QoderCard data={qoder} />
       </main>

@@ -23,6 +23,7 @@ export const api = {
   getWorkBuddy: () => req('GET', '/panel/api/workbuddy'),
   getQoder: () => req('GET', '/panel/api/qoder'),
   postTraeRefresh: (region) => req('POST', `/panel/api/trae/refresh?region=${encodeURIComponent(region)}`),
+  postTraeCheckin: (region) => req('POST', `/panel/api/trae/checkin?region=${encodeURIComponent(region)}`),
   postWorkBuddyControl: (variant, action) =>
     req('POST', `/panel/api/workbuddy/control?variant=${encodeURIComponent(variant)}`, action),
 };

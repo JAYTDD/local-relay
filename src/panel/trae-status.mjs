@@ -182,6 +182,55 @@ export function createTraeStatus({ providers }) {
       };
     },
 
+    /**
+     * 领取今日签到奖励。本数据层唯一的写操作。
+     *
+     * 守卫顺序照抄源实现（registerTraeUsageRoute 的 checkin 分支）：先读 checkinStatus，
+     * 再决定要不要写。上游按北京日期幂等（重复领取返回 code:0 而额度不变），但我们不依赖
+     * 这一点——"不会重复发放"是需要验证的上游性质，不是可以指望的保证。
+     *
+     * 业务拒绝以 HTTP 200 + 非零 code 返回（最常见 9004 = 请求没带 x-device-id），
+     * 那种情况报 claimed:false 而非抛错，好让调用方区分"上游拒绝"与"请求没到达"。
+     */
+    async checkin(region) {
+      const entry = providerFor(providers(), region);
+      if (!entry) return { state: 'failed', reason: `trae region not configured: ${region}` };
+      if (region !== 'cn') {
+        return { state: 'failed', reason: 'check-in is only available for the CN region' };
+      }
+      const usage = entry.provider?.usage;
+      if (!usage) return { state: 'failed', reason: 'action not wired yet: checkin (needs usage client)' };
+
+      // 先读：已签 / 未开启都不该再打写接口
+      let status;
+      try {
+        status = await usage.checkinStatus();
+      } catch (e) {
+        return { state: 'failed', reason: `checkin status unavailable: ${String(e?.message ?? e)}` };
+      }
+      if (status?.enabled === false) {
+        return { state: 'updated', claimed: false, reason: 'check-in is not enabled for this account' };
+      }
+      if (status?.checkedIn === true) {
+        return { state: 'updated', claimed: false, reason: 'already checked in today' };
+      }
+      if (status?.didCheckedIn === true) {
+        return { state: 'updated', claimed: false, reason: 'already checked in from this device today' };
+      }
+
+      try {
+        const out = await usage.claimCheckin();
+        return {
+          state: 'updated',
+          claimed: out.claimed === true,
+          code: out.code,
+          message: out.message,
+        };
+      } catch (e) {
+        return { state: 'failed', reason: String(e?.message ?? e) };
+      }
+    },
+
     async refresh(region) {
       const entry = providerFor(providers(), region);
       if (!entry) throw new Error(`trae region not configured: ${region}`);

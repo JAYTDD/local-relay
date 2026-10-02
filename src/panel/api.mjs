@@ -61,6 +61,11 @@ export function createPanelApi(deps) {
     const out = await traeStatus.refresh(region);
     json(res, 200, out);
   });
+  routes.set('POST /panel/api/trae/checkin', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const region = url.searchParams.get('region') ?? 'cn';
+    json(res, 200, await traeStatus.checkin(region));
+  });
   routes.set('GET /panel/api/workbuddy', async (req, res) => {
     const out = {};
     for (const variant of wbStatus.variants()) {
