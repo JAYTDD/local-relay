@@ -6,9 +6,12 @@
  * 这里做一层统一入口：单一端口 + 单一 key + 模型名前缀路由。
  */
 import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createTraeProvider } from './providers/trae.mjs';
 import { createWorkBuddyProvider } from './providers/workbuddy.mjs';
 import { createPanelApi } from './panel/api.mjs';
+import { createStaticHandler } from './panel/static.mjs';
 
 const PORT = Number(process.env.RELAY_PORT ?? 8790);
 const ACCESS_KEY = process.env.RELAY_KEY ?? '';
@@ -24,6 +27,9 @@ const PROVIDERS = [
 const state = { providers: [], ready: false, errors: [] };
 
 const panelApi = createPanelApi({ providers: () => state.providers });
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const panelStatic = createStaticHandler({ distDir: path.join(__dirname, '..', 'panel', 'dist') });
 
 function json(res, status, body) {
   const payload = JSON.stringify(body);
@@ -288,6 +294,10 @@ const server = http.createServer(async (req, res) => {
       const handled = await panelApi.handle(req, res, pathname);
       if (handled) return;
       return json(res, 404, { error: { message: `no such panel route: ${pathname}` } });
+    }
+    if (pathname === '/panel' || pathname.startsWith('/panel/')) {
+      const served = await panelStatic.handle(req, res, pathname);
+      if (served) return;
     }
     if (req.method === 'GET' && (pathname === '/healthz' || pathname === '/health')) {
       return json(res, 200, { ok: true, ready: state.ready, providers: state.providers.map((p) => ({ id: p.def.prefix, label: p.def.label, models: p.models.length, error: p.error })) });
