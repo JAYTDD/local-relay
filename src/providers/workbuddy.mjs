@@ -56,6 +56,13 @@ export function createWorkBuddyProvider(variantId) {
     path: statePath(`catalog.${variantId}.json`),
   });
 
+  // 模型启停偏好按账号持久化（源 createVariantRuntime 同款装配），路径同样隔离。
+  // 与 catalog store 相反：写失败会抛异常（源实现刻意不改内存态，
+  // 免得磁盘与内存不一致而谎报成功）。
+  const visibility = new wb.WorkBuddyVisibilityStore({
+    path: statePath(`visibility.${variantId}.json`),
+  });
+
   /** 目录来源（面板要能说明这批模型是哪来的） */
   let catalogSource = { source: 'fallback' };
 
@@ -70,6 +77,7 @@ export function createWorkBuddyProvider(variantId) {
     store,
     client,
     savedCatalogs,
+    visibility,
     account,
     catalogSource: () => ({ ...catalogSource }),
 

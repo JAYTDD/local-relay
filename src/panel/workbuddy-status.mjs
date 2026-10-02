@@ -92,12 +92,23 @@ export function createWorkBuddyStatus({ providers }) {
         creditsField = { creditsError: String(e?.message ?? e) };
       }
 
+      // 模型启停按账号维度读（源 workBuddyWebStatus 的 visibility 段）。
+      // 读不到就不显示，不编造——空列表与"没隐藏任何模型"同义。
+      let visibilityField = {};
+      try {
+        const account = await liveProvider.account?.();
+        if (liveProvider.visibility && account !== undefined) {
+          visibilityField = { visibility: { disabled: [...liveProvider.visibility.disabled(account)] } };
+        }
+      } catch { /* 读不到就不显示 */ }
+
       return {
         status: signedIn ? 'signed-in' : 'signed-out',
         ...(signedIn ? {} : { reason: 'no models discovered' }),
         variant,
         ...catalogField,
         ...creditsField,
+        ...visibilityField,
         models,
       };
     },
@@ -113,6 +124,29 @@ export function createWorkBuddyStatus({ providers }) {
           entry.models = entry.provider.models();
           return { state: 'updated', models: out.models ?? entry.models, errors: out.errors ?? [] };
         } catch (e) {
+          return { state: 'failed', reason: String(e?.message ?? e) };
+        }
+      }
+      if (kind === 'set-model-visibility') {
+        const model = action?.model;
+        if (typeof model !== 'string' || model === '') {
+          return { state: 'failed', reason: 'set-model-visibility requires a model id' };
+        }
+        const visibility = entry.provider.visibility;
+        if (!visibility) {
+          return { state: 'failed', reason: 'action not wired yet: set-model-visibility (needs visibility store)' };
+        }
+        const account = await entry.provider.account?.();
+        if (account === undefined) {
+          return { state: 'failed', reason: 'set-model-visibility needs a signed-in account with a uid' };
+        }
+        try {
+          // 源语义：visible=true 且这是最后一个被隐藏的模型时，整条账号记录被删除
+          // （空列表与缺记录同义，文件不该攒空桶）。
+          visibility.setVisible(account, model, action?.visible !== false);
+          return { state: 'updated', visibility: { disabled: [...visibility.disabled(account)] } };
+        } catch (e) {
+          // 写失败必须报出去：源实现刻意不改内存态，吞掉会让状态与磁盘不一致
           return { state: 'failed', reason: String(e?.message ?? e) };
         }
       }
