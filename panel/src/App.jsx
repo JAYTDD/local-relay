@@ -3,25 +3,28 @@ import { api } from './api.js';
 import ChannelHealth from './components/ChannelHealth.jsx';
 import TraeCard from './components/TraeCard.jsx';
 import WorkBuddyCard from './components/WorkBuddyCard.jsx';
+import QoderCard from './components/QoderCard.jsx';
 
 export default function App() {
   const [health, setHealth] = useState(null);
   const [trae, setTrae] = useState(null);
   const [wb, setWb] = useState(null);
+  const [qoder, setQoder] = useState(null);
   const [error, setError] = useState('');
 
   const loadTrae = useCallback(async () => { setTrae(await api.getTrae()); }, []);
   const loadWb = useCallback(async () => { setWb(await api.getWorkBuddy()); }, []);
+  const loadQoder = useCallback(async () => { setQoder(await api.getQoder()); }, []);
 
   const reload = useCallback(async () => {
     try {
       setError('');
-      const [h] = await Promise.all([api.getHealth(), loadTrae(), loadWb()]);
+      const [h] = await Promise.all([api.getHealth(), loadTrae(), loadWb(), loadQoder()]);
       setHealth(h);
     } catch (e) {
       setError(String(e.message ?? e));
     }
-  }, [loadTrae, loadWb]);
+  }, [loadTrae, loadWb, loadQoder]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -47,6 +50,7 @@ export default function App() {
         <ChannelHealth health={health} />
         <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={() => {}} />
         <WorkBuddyCard data={wb} onControl={controlWb} />
+        <QoderCard data={qoder} />
       </main>
     </div>
   );

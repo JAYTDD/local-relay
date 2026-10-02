@@ -27,6 +27,33 @@ node src/server.mjs
 | `RELAY_PORT` | `8790` | 监听端口 |
 | `RELAY_KEY` | 空 | 设了则客户端需带 `Authorization: Bearer <key>` |
 
+## 控制面板
+
+启动网关后打开 <http://127.0.0.1:8790/panel>。
+
+首次使用或改动 `panel/` 后需要构建一次前端：
+
+```bash
+npm run build:panel
+```
+
+一条命令构建并启动：
+
+```bash
+npm run start:full
+```
+
+面板内容：
+
+| 区块 | 说明 |
+|---|---|
+| 网关总览 | 四个通道的模型数与就绪状态 |
+| Trae | 国内版 / 国际版切换、额度、签到、模型列表与上下文窗口 |
+| WorkBuddy | 国内版 / 国际版切换、额度、模型倍率与免费标记、刷新模型 |
+| Qoder | 占位（待 `qoderclicn` 登录后接入） |
+
+面板 API 挂在 `/panel/api/*`，只读接口不含任何凭据字段。
+
 ## 接入 ZCode
 
 在 ZCode 新建供应商：

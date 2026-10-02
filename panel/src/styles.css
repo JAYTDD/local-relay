@@ -57,7 +57,8 @@ code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; 
   padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
 }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.ghost { background: transparent; color: var(--muted); border-color: var(--border); margin-left: auto; }
+.btn.ghost { background: transparent; color: var(--muted); border-color: var(--border); }
+.status-line .btn.ghost { margin-left: auto; }
 .sub { font-size: 13px; color: var(--muted); margin: 16px 0 8px; font-weight: 500; }
 .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .kv-grid .k { display: block; color: var(--muted); font-size: 12px; }
