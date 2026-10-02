@@ -22,3 +22,24 @@ body {
 .app { max-width: 1100px; margin: 0 auto; padding: 24px; }
 .app-header h1 { margin: 0 0 4px; font-size: 20px; }
 .muted { color: var(--muted); }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.card-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.card-head h2 { margin: 0; font-size: 15px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.table th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.badge.ok { background: rgba(62,207,142,.15); color: var(--ok); }
+.badge.err { background: rgba(239,83,80,.15); color: var(--err); }
+.badge.warn { background: rgba(240,180,41,.15); color: var(--warn); }
+.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+.banner.err { background: rgba(239,83,80,.12); color: var(--err); border: 1px solid rgba(239,83,80,.3); }
+.small { font-size: 12px; }
+code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
