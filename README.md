@@ -54,6 +54,14 @@ npm run start:full
 
 面板 API 挂在 `/panel/api/*`，只读接口不含任何凭据字段。
 
+### 验收记录
+
+- `node --test test/*.test.js` 全部通过（22 项）
+- `GET /panel/api/health` 返回 4 个通道
+- 面板 API 响应体不含 accessToken / refreshToken / Bearer 等凭据字段
+- `/panel` 返回 HTML，`/v1/models` 仍返回 56 个模型
+- 流式响应中 `"role"` 仅出现 1 次（流规范化未被面板改动破坏）
+
 ## 接入 ZCode
 
 在 ZCode 新建供应商：
