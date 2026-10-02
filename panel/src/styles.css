@@ -43,3 +43,23 @@ body {
 .banner.err { background: rgba(239,83,80,.12); color: var(--err); border: 1px solid rgba(239,83,80,.3); }
 .small { font-size: 12px; }
 code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.tabs { display: flex; gap: 4px; }
+.tab {
+  background: transparent; color: var(--muted); border: 1px solid var(--border);
+  padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.tab.active { background: rgba(76,141,255,.15); color: var(--accent); border-color: rgba(76,141,255,.4); }
+.status-line { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.btn {
+  background: rgba(76,141,255,.18); color: var(--accent); border: 1px solid rgba(76,141,255,.35);
+  padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.ghost { background: transparent; color: var(--muted); border-color: var(--border); margin-left: auto; }
+.sub { font-size: 13px; color: var(--muted); margin: 16px 0 8px; font-weight: 500; }
+.kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.kv-grid .k { display: block; color: var(--muted); font-size: 12px; }
+.kv-grid .v { font-size: 16px; }
+.details { margin: 8px 0; }
