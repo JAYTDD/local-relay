@@ -1,7 +1,14 @@
 /**
  * WorkBuddy 供应商：从 dsh-workbuddy-connect 提取协议层。
  * 两个变体（国内 workbuddy / 国际 workbuddy-ai）各自独立的凭据、目录与 shim。
+ *
+ * ⚠️ store 必须传 keyProvider（原插件 apply() 对两个变体都传，见下方
+ * loadKeyProviderFactory 的注释）。漏掉它 wbai 就地报 not_signed_in——
+ * 这是移植 wbai 不可用的根因，别再丢。
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as wb from 'dsh-workbuddy-connect';
 import { statePath } from '../state-dir.mjs';
 
@@ -9,6 +16,63 @@ const logger = {
   warn: (...a) => console.error('[workbuddy][warn]', ...a),
   error: (...a) => console.error('[workbuddy][error]', ...a),
 };
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 原插件 apply() 给**每个**变体的 store 传 keyProvider（index.js 的
+ * `atRestKeysFor = (variant) => atRestKeyProviderFor(variant)`），它带着
+ * 平台发现模式（Windows 上是注册表找 app）。这个工厂**没有从包根导出**，
+ * 而 store 不传 keyProvider 时自建的默认 resolver discovery 落回 "none"，
+ * 永远不去找 app 的 Electron 二进制——WorkBuddy 5.6 起凭据文件是加密的，
+ * 解密必须临时拉起 app 自己的二进制取 at-rest key，于是 wbai 永远
+ * not_signed_in。CN 的 app（5.3.8）凭据还是明文踩不到这条链，一旦 CN
+ * 客户端升级到 5.6.2+ 同样会挂，所以两个变体都要传。
+ *
+ * 定位方式：扫包内 lib 目录，按函数名 + 函数体引用的类名匹配（tsdown
+ * 产物保留可读符号，插件升级换 chunk 文件名也不受影响）；不实际调用
+ * 任何导出函数。结果按模块缓存，两个变体共用一次扫描。
+ */
+let keyProviderFactory;
+
+async function loadKeyProviderFactory() {
+  if (keyProviderFactory !== undefined) return keyProviderFactory;
+  const libDirs = [
+    path.resolve(HERE, '..', '..', 'node_modules', 'dsh-workbuddy-connect', 'lib'),
+    path.resolve(HERE, '..', '..', 'shims', 'node_modules', 'dsh-workbuddy-connect', 'lib'),
+  ];
+  let lastErr;
+  for (const dir of libDirs) {
+    let files;
+    try {
+      files = fs.readdirSync(dir);
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+    for (const file of files) {
+      // bin.js 是 CLI 入口，import 可能有副作用；其余都是纯协议层 chunk
+      if (!file.endsWith('.js') || file === 'bin.js') continue;
+      let mod;
+      try {
+        mod = await import(pathToFileURL(path.join(dir, file)).href);
+      } catch (e) {
+        lastErr = e;
+        continue;
+      }
+      for (const value of Object.values(mod)) {
+        if (typeof value !== 'function' || value.name !== 'atRestKeyProviderFor') continue;
+        if (!Function.prototype.toString.call(value).includes('WorkBuddyAtRestKeyProvider')) continue;
+        keyProviderFactory = value;
+        return keyProviderFactory;
+      }
+    }
+  }
+  throw new Error(
+    `无法在 dsh-workbuddy-connect 包内定位 atRestKeyProviderFor（未从包根导出，` +
+      `凭据解密必需）：${lastErr?.message ?? lastErr}`,
+  );
+}
 
 /**
  * 从凭据算账号键（visibility / probe / catalog 都按它分桶）。纯函数，不做 IO。
@@ -28,13 +92,16 @@ function accountKeyFromCredential(credential) {
 /**
  * @param {'cn'|'global'} variantId
  */
-export function createWorkBuddyProvider(variantId) {
+export async function createWorkBuddyProvider(variantId) {
   const variant = variantId === 'global' ? wb.AI_VARIANT : wb.CN_VARIANT;
   const fallback = variantId === 'global' ? wb.FALLBACK_WORKBUDDY_AI_MODELS : wb.FALLBACK_WORKBUDDY_MODELS;
 
+  // 原插件 apply() 同款（index.js:2094）：keyProvider 对两个变体都传。
+  const atRestKeyProviderFor = await loadKeyProviderFactory();
   const client = new wb.WorkBuddyUpstreamClient();
   const store = new wb.WorkBuddyCredentialStore({
     variant,
+    keyProvider: atRestKeyProviderFor(variant),
     refresh: (credential) => client.refreshToken(credential),
   });
   const catalog = new wb.WorkBuddyCatalog(fallback);

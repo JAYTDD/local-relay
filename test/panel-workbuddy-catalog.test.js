@@ -59,7 +59,7 @@ test('无保存记录时 get 返回 undefined 而不抛', async () => {
 
 test('状态路径落在 local-relay 自己的目录，不碰 DSH 插件那份', async () => {
   const { createWorkBuddyProvider } = await import('../src/providers/workbuddy.mjs');
-  const provider = createWorkBuddyProvider('cn');
+  const provider = await createWorkBuddyProvider('cn');
   const file = provider.savedCatalogs.filePath();
   assert.equal(file.includes('local-relay'), true, `catalog 路径没隔离：${file}`);
   assert.notEqual(path.basename(file), '.workbuddy-catalog.json', '不能复用插件自己的文件名');
@@ -67,8 +67,8 @@ test('状态路径落在 local-relay 自己的目录，不碰 DSH 插件那份',
 
 test('两个变体各自的 catalog 文件不同名', async () => {
   const { createWorkBuddyProvider } = await import('../src/providers/workbuddy.mjs');
-  const cn = createWorkBuddyProvider('cn').savedCatalogs.filePath();
-  const ai = createWorkBuddyProvider('global').savedCatalogs.filePath();
+  const cn = (await createWorkBuddyProvider('cn')).savedCatalogs.filePath();
+  const ai = (await createWorkBuddyProvider('global')).savedCatalogs.filePath();
   assert.notEqual(cn, ai);
 });
 
@@ -78,7 +78,7 @@ test('uid 缺失的凭据不给账号键（不写进共享桶）', async () => {
   // 这种真值字符串，让所有缺 uid 的账号共用一个桶。providers 层的 accountKeyOf 更严。
   assert.equal(visibilityAccountOf({ enterpriseId: 'e1' }), 'undefined:e1');
   const { createWorkBuddyProvider } = await import('../src/providers/workbuddy.mjs');
-  const provider = createWorkBuddyProvider('cn');
+  const provider = await createWorkBuddyProvider('cn');
   // 本机已登录时 account() 会给出真实账号键；两种结果都合法，只要不是 'undefined:...' 形态
   const key = await provider.account();
   if (key !== undefined) {
@@ -117,7 +117,7 @@ test('真实 provider：刷新后落盘，重建 provider 能读回（重启不�
   const before = process.env.RELAY_STATE_DIR;
   process.env.RELAY_STATE_DIR = dir;
   try {
-    const p1 = createWorkBuddyProvider('cn');
+    const p1 = await createWorkBuddyProvider('cn');
     await p1.start();
     await p1.refreshModels();
     const file = p1.savedCatalogs.filePath();
