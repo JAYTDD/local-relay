@@ -13,6 +13,7 @@ import { createWorkBuddyProvider } from './providers/workbuddy.mjs';
 import { createQoderProvider } from './providers/qoder.mjs';
 import { createPanelApi } from './panel/api.mjs';
 import { createStaticHandler } from './panel/static.mjs';
+import { resolveModel } from './model-routing.mjs';
 
 const PORT = Number(process.env.RELAY_PORT ?? 8790);
 const ACCESS_KEY = process.env.RELAY_KEY ?? '';
@@ -56,21 +57,6 @@ async function readBody(req, limit = 64 * 1024 * 1024) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
-}
-
-/** 按前缀把外部模型名拆成 { provider, upstreamModel }。 */
-function resolveModel(modelId) {
-  for (const p of state.providers) {
-    const prefix = `${p.def.prefix}/`;
-    if (modelId.startsWith(prefix)) {
-      return { provider: p, upstreamModel: modelId.slice(prefix.length) };
-    }
-  }
-  // 未带前缀时按顺序找第一个声明该模型的 provider
-  for (const p of state.providers) {
-    if (p.models.some((m) => m.id === modelId)) return { provider: p, upstreamModel: modelId };
-  }
-  return null;
 }
 
 function listModels() {
@@ -246,10 +232,12 @@ async function handleChat(req, res) {
     return json(res, 400, { error: { message: `Invalid JSON body: ${e.message}` } });
   }
   const modelId = body.model;
-  const hit = resolveModel(modelId);
+  const hit = resolveModel(state.providers, modelId);
   if (!hit) {
     return json(res, 404, {
-      error: { message: `Unknown model: ${modelId}. See GET /v1/models for the list.` },
+      error: {
+        message: `Unknown model: ${modelId}. Take the id from GET /v1/models — ids are case-sensitive and the display name is not the id. If the model is new upstream, refresh its channel in the panel first.`,
+      },
     });
   }
   const { provider, upstreamModel } = hit;
