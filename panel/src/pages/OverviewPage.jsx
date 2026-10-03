@@ -56,10 +56,10 @@ export default function OverviewPage({ health, navigate }) {
               </div>
               {regions.map((r) => {
                 const p = health.providers.find((x) => x.prefix === r.prefix);
-                const state = !p ? 'mute' : p.error ? 'err' : 'ok';
+                const state = !p ? 'mute' : p.error ? 'err' : p.enabled === false ? 'warn' : 'ok';
                 return (
                   <button key={r.key} type="button" className="region-row" onClick={() => navigate(page, { r: r.key })}>
-                    <span className={`nav-dot ${state}`} title={p?.error ?? '就绪'} />
+                    <span className={`nav-dot ${state}`} title={p?.error ?? (p?.enabled === false ? '已停用' : '就绪')} />
                     <span>{r.label}</span>
                     <span className="prefix">{r.prefix}/</span>
                     <span className="grow" />

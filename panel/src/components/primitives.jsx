@@ -115,6 +115,23 @@ export function CopyButton({ value, className = '', children, title = '点击复
   );
 }
 
+/** 开关（设置项用）；checked 受控 */
+export function Switch({ checked, onChange, disabled, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      className={`switch ${checked ? 'on' : ''}`}
+      onClick={() => onChange(!checked)}
+    >
+      <span className="knob" />
+    </button>
+  );
+}
+
 /** 空状态 */
 export function EmptyState({ icon, title, sub, children }) {
   return (

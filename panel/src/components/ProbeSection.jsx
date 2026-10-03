@@ -6,7 +6,7 @@ import { SparklesIcon } from './icons.jsx';
  * 推理探针区（WorkBuddy / Qoder 共用）。
  * 会真发上游请求并消耗额度——默认整块收起，明确标注代价。
  */
-export default function ProbeSection({ probe, busy, onProbe, idleLabel = '空闲' }) {
+export default function ProbeSection({ probe, busy, onProbe, idleLabel = '空闲', extraAction }) {
   if (!probe) return null;
   const candidates = probe.candidates ?? [];
   const results = probe.results ?? [];
@@ -20,6 +20,8 @@ export default function ProbeSection({ probe, busy, onProbe, idleLabel = '空闲
           <SparklesIcon size={14} /> 推理能力探测
           {results.length > 0 && `（已有 ${results.length} 项结果）`}
           {probe.running ? ' · 正在探测…' : candidates.length > 0 ? ` · ${candidates.length} 个候选` : ` · ${idleLabel}`}
+          <span style={{ flex: 1 }} />
+          {extraAction}
         </>
       }
     >

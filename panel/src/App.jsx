@@ -43,6 +43,8 @@ export default function App() {
     const entries = health.providers.filter((p) => item.prefixes.includes(p.prefix));
     if (entries.length === 0) return 'ok';
     if (entries.some((p) => p.error)) return 'err';
+    // 通道被面板关闭（如 Trae 区域启停）：能运行但不在服务，用黄色区分
+    if (entries.some((p) => p.enabled === false)) return 'warn';
     return 'ok';
   };
 

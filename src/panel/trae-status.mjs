@@ -23,6 +23,12 @@ function providerFor(providers, region) {
   return providers.find((p) => p.def.prefix === PREFIX_BY_REGION[region]);
 }
 
+/** Raw Chat 网关诊断（源 rawDiagnostic 同款；仅 CN 装配，未装配时如实报告） */
+function toRawChat(provider) {
+  const diagnostic = provider?.rawDiagnostic?.();
+  return diagnostic === undefined ? { state: 'not-wired' } : diagnostic;
+}
+
 /** 归一化模型行 */
 function toModelRow(m) {
   return {
@@ -193,9 +199,55 @@ export function createTraeStatus({ providers }) {
             }
           : {}),
         ...usageFields,
-        models,
+        // 面板管理需要全部模型（选集只影响对话），display 语义 = 只剔死模型
+        models: liveProvider.displayModels?.() ?? models,
         enabledModelIds: models.map((m) => m.id),
+        // 通道偏好与诊断（源卡片的设置面/诊断面）
+        prefs: {
+          enabled: liveProvider.enabled?.() ?? true,
+          selectedAccountId: liveProvider.prefs?.get().selectedAccountId,
+          modelSelection: liveProvider.prefs?.get().enabledModelIds ?? [],
+          imageSelection: liveProvider.prefs?.get().imageModelIds ?? [],
+          contextBudgets: liveProvider.prefs?.get().contextBudgets ?? {},
+        },
+        rawChat: toRawChat(liveProvider),
       };
+    },
+
+    /**
+     * 面板写操作（源插件由 DSH 设置面持久化的那些字段）。
+     * 语义照抄：账号切换 = store.selectAccount；选集 = 空数组"全要"；
+     * 区域关闭 = 提供方整体下线（路由层从 /v1/models 剔除）。
+     */
+    async control(region, action) {
+      const entry = providerFor(providers(), region);
+      if (!entry) return { state: 'failed', reason: `trae region not configured: ${region}` };
+      const provider = entry.provider;
+      if (!provider) return { state: 'failed', reason: entry.error ?? 'provider unavailable' };
+      switch (action?.action) {
+        case 'select-account':
+          if (typeof action.accountId !== 'string') {
+            return { state: 'failed', reason: 'select-account requires accountId' };
+          }
+          return provider.selectAccount(action.accountId);
+        case 'set-enabled':
+          return provider.setEnabled(action.enabled === true);
+        case 'set-model-selection':
+          if (!Array.isArray(action.models)) return { state: 'failed', reason: 'set-model-selection requires models' };
+          return provider.setModelSelection(action.models);
+        case 'set-image-selection':
+          if (!Array.isArray(action.models)) return { state: 'failed', reason: 'set-image-selection requires models' };
+          return provider.setImageSelection(action.models);
+        case 'set-context-budgets':
+          if (action.budgets === undefined || typeof action.budgets !== 'object' || Array.isArray(action.budgets)) {
+            return { state: 'failed', reason: 'set-context-budgets requires budgets object' };
+          }
+          return provider.setContextBudgets(action.budgets);
+        case 'logout':
+          return provider.logout();
+        default:
+          return { state: 'failed', reason: `unknown action: ${String(action?.action)}` };
+      }
     },
 
     /**

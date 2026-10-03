@@ -37,6 +37,8 @@ export function healthDocument(providers) {
       label: p.def.label,
       kind: p.def.kind,
       models: p.models.length,
+      // 通道被面板关闭（Trae 区域启停）时如实标注，前端据此显示状态点
+      ...(p.provider?.enabled?.() === false ? { enabled: false } : {}),
       ...(p.error === undefined ? {} : { error: p.error }),
     })),
   };
@@ -65,6 +67,18 @@ export function createPanelApi(deps) {
     const url = new URL(req.url, 'http://127.0.0.1');
     const region = url.searchParams.get('region') ?? 'cn';
     json(res, 200, await traeStatus.checkin(region));
+  });
+  routes.set('POST /panel/api/trae/control', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const region = url.searchParams.get('region') ?? 'cn';
+    const raw = await readRequestBody(req);
+    let body;
+    try {
+      body = JSON.parse(raw || '{}');
+    } catch {
+      return json(res, 400, { error: { message: 'invalid JSON body' } });
+    }
+    json(res, 200, await traeStatus.control(region, body));
   });
   routes.set('GET /panel/api/workbuddy', async (req, res) => {
     const out = {};
@@ -103,6 +117,18 @@ export function createPanelApi(deps) {
       out[variant] = await qoderStatus.document(variant);
     }
     json(res, 200, { variants: out });
+  });
+  routes.set('POST /panel/api/qoder/control', async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const variant = url.searchParams.get('variant') ?? 'cn';
+    const raw = await readRequestBody(req);
+    let body;
+    try {
+      body = JSON.parse(raw || '{}');
+    } catch {
+      return json(res, 400, { error: { message: 'invalid JSON body' } });
+    }
+    json(res, 200, await qoderStatus.control(variant, body));
   });
   routes.set('POST /panel/api/qoder/refresh', async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');

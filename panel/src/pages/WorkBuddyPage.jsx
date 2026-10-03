@@ -3,7 +3,7 @@ import ChannelLayout from '../components/ChannelLayout.jsx';
 import CreditsPanel from '../components/CreditsPanel.jsx';
 import ModelTable from '../components/ModelTable.jsx';
 import ProbeSection from '../components/ProbeSection.jsx';
-import { Disclosure, EmptyState, LoadingBlock, Notice, Section, StatusPill, fmtCtx, fmtNum, fmtRate, fmtTime } from '../components/primitives.jsx';
+import { Disclosure, EmptyState, LoadingBlock, Notice, Section, StatusPill, Switch, fmtCtx, fmtNum, fmtRate, fmtTime } from '../components/primitives.jsx';
 import { AlertIcon, BriefcaseIcon, RefreshIcon } from '../components/icons.jsx';
 import { api } from '../api.js';
 import { useAsyncData } from '../hooks.js';
@@ -52,6 +52,38 @@ export default function WorkBuddyPage({ variant, onVariant }) {
       await reload();
     } catch (e) {
       setNotice({ kind: 'err', text: `探测 ${modelId} 失败：${e.message ?? e}` });
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function clearProbe() {
+    setBusy('清空探针');
+    setNotice(null);
+    try {
+      const out = await api.postWorkBuddyControl(variant, { action: 'clear' });
+      setNotice(out?.state === 'cleared'
+        ? { kind: 'ok', text: '已清空全部探针记录' }
+        : { kind: 'err', text: `清空失败：${out?.reason ?? out?.state}` });
+      await reload();
+    } catch (e) {
+      setNotice({ kind: 'err', text: `清空失败：${e.message ?? e}` });
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function setSetting(action, okText) {
+    setBusy(action.action);
+    setNotice(null);
+    try {
+      const out = await api.postWorkBuddyControl(variant, action);
+      setNotice(out?.state === 'updated'
+        ? { kind: 'ok', text: okText }
+        : { kind: 'err', text: `设置失败：${out?.reason ?? out?.state}` });
+      await reload();
+    } catch (e) {
+      setNotice({ kind: 'err', text: `设置失败：${e.message ?? e}` });
     } finally {
       setBusy('');
     }
@@ -121,6 +153,17 @@ export default function WorkBuddyPage({ variant, onVariant }) {
 
           <ProbeSection probe={doc.probe} busy={busy} onProbe={probe} />
 
+          <ProbeSection
+            probe={doc.probe}
+            busy={busy}
+            onProbe={probe}
+            extraAction={(
+              <button type="button" className="btn sm" disabled={busy !== ''} onClick={clearProbe}>
+                清空记录
+              </button>
+            )}
+          />
+
           <Section
             title="模型"
             count={`${(doc.models ?? []).length}${disabled.size > 0 ? ` · 已隐藏 ${disabled.size}` : ''}`}
@@ -157,6 +200,43 @@ export default function WorkBuddyPage({ variant, onVariant }) {
               </p>
             )}
           </Section>
+
+          <Disclosure summary="通道设置与诊断">
+            {doc.maximumContext?.supported && (
+              <div className="setting-row">
+                <div className="grow">
+                  <div>最大上下文窗口</div>
+                  <div className="desc">上游声明多个窗口时选用最大的（源 useMaximumContextWindow，默认开）</div>
+                </div>
+                <Switch
+                  checked={doc.maximumContext.enabled !== false}
+                  disabled={busy !== ''}
+                  label="最大上下文窗口"
+                  onChange={(on) => setSetting({ action: 'set-maximum-context-window', enabled: on }, on ? '已启用最大上下文' : '已停用最大上下文')}
+                />
+              </div>
+            )}
+            <div className="setting-row">
+              <div className="grow">
+                <div>授权自动推理探测</div>
+                <div className="desc">开启后探针服务可自动发上游请求（消耗额度）；关闭时仅手动逐个点击</div>
+              </div>
+              <Switch
+                checked={doc.probeConsent === true}
+                disabled={busy !== ''}
+                label="授权自动推理探测"
+                onChange={(on) => setSetting({ action: 'set-probe-consent', enabled: on }, on ? '已授权自动探测' : '已关闭自动探测')}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={busy !== ''}
+              onClick={() => setSetting({ action: 'logout' }, '已清除网关保存的凭据副本')}
+            >
+              清除凭据副本（logout）
+            </button>
+          </Disclosure>
         </>
       )}
     </ChannelLayout>

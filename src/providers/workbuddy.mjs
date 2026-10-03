@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as wb from 'dsh-workbuddy-connect';
 import { statePath } from '../state-dir.mjs';
+import { createChannelPrefs } from '../channel-prefs.mjs';
 
 const logger = {
   warn: (...a) => console.error('[workbuddy][warn]', ...a),
@@ -95,6 +96,7 @@ function accountKeyFromCredential(credential) {
 export async function createWorkBuddyProvider(variantId) {
   const variant = variantId === 'global' ? wb.AI_VARIANT : wb.CN_VARIANT;
   const fallback = variantId === 'global' ? wb.FALLBACK_WORKBUDDY_AI_MODELS : wb.FALLBACK_WORKBUDDY_MODELS;
+  const prefs = createChannelPrefs({ channel: 'workbuddy', variant: variantId });
 
   // 原插件 apply() 同款（index.js:2094）：keyProvider 对两个变体都传。
   const atRestKeyProviderFor = await loadKeyProviderFactory();
@@ -105,9 +107,19 @@ export async function createWorkBuddyProvider(variantId) {
     refresh: (credential) => client.refreshToken(credential),
   });
   const catalog = new wb.WorkBuddyCatalog(fallback);
-  if (variantId === 'global') catalog.setUseMaximumContextWindow(true);
+  // 最大上下文开关（源语义：仅国际变体支持，默认开）。改动走面板写操作，
+  // 持久化在偏好文件里，启动时恢复。
+  const maximumContextEnabled = () => {
+    const saved = prefs.get().useMaximumContextWindow;
+    if (variantId === 'global') return saved === undefined ? true : saved === true;
+    return saved === true;
+  };
+  if (variant.id !== wb.CN_VARIANT.id) catalog.setUseMaximumContextWindow(maximumContextEnabled());
   // 插件默认不可见，发现成功后才 setVisible(true)；独立网关直接暴露
   catalog.setVisible(true);
+
+  // 探针同意（源 config.probeConsent，默认关）：开启后探针服务的自动探测被授权。
+  const probeConsentEnabled = () => prefs.get().probeConsent === true;
 
   // 目录缓存（源 createVariantRuntime 同款装配）。路径刻意落在 local-relay 自己的
   // 状态目录：DSH 插件用同名文件写 ~/.dsh，而 store 的 persist() 是全量覆盖写，
@@ -125,6 +137,8 @@ export async function createWorkBuddyProvider(variantId) {
 
   /** 目录来源（面板要能说明这批模型是哪来的） */
   let catalogSource = { source: 'fallback' };
+  /** 上次成功/尝试拉取的时刻（sweep 的陈旧目录重试用） */
+  let lastFetchAtMs = 0;
 
   /**
    * 账号键缓存。
@@ -162,10 +176,8 @@ export async function createWorkBuddyProvider(variantId) {
     catalog,
     credentials: store,
     client,
-    // 本地网关没有设置界面 → 自动探测不授权。
-    // 面板的手动点击走 probe(modelId, manualConsent=true) 这条"一次性同意"通道，
-    // 它不改变这里的配置。
-    consent: () => false,
+    // 面板可开关（偏好 probeConsent，默认关）；手动点击始终走一次性同意
+    consent: () => probeConsentEnabled(),
     account,
   });
 
@@ -182,7 +194,38 @@ export async function createWorkBuddyProvider(variantId) {
     probeStore,
     probeService,
     account,
+    prefs,
     catalogSource: () => ({ ...catalogSource }),
+    /** 最大上下文开关当前值（面板展示与切换用） */
+    maximumContext: {
+      supported: variant.id !== wb.CN_VARIANT.id,
+      get: maximumContextEnabled,
+      set(value) {
+        if (variant.id === wb.CN_VARIANT.id) {
+          return { state: 'failed', reason: 'maximum context window is not supported for the CN variant' };
+        }
+        prefs.patch({ useMaximumContextWindow: value === true });
+        catalog.setUseMaximumContextWindow(value === true);
+        return { state: 'updated', enabled: value === true };
+      },
+    },
+    /** 探针同意开关 */
+    probeConsent: {
+      get: probeConsentEnabled,
+      set(value) {
+        prefs.patch({ probeConsent: value === true });
+        return { state: 'updated', enabled: value === true };
+      },
+    },
+    /** 清空全部探针记录（源语义：card 的显式 clear 动作 = 全账号清空） */
+    clearProbe() {
+      probeStore.clear();
+      return { state: 'cleared' };
+    },
+    async logout() {
+      await store.logout();
+      return { state: 'updated' };
+    },
 
     async start() {
       // 先解析一次凭据，把账号键缓存填上（探针的同步 account() 依赖它）
@@ -207,40 +250,78 @@ export async function createWorkBuddyProvider(variantId) {
     },
 
     async refreshModels() {
-      const errors = [];
-      try {
-        const credential = await store.resolve();
-        await refreshAccount();
-        const models = await client.fetchModels(credential);
-        if (Array.isArray(models) && models.length > 0) {
-          catalog.set(models);
-          catalogSource = { source: 'live', fetchedAtMs: Date.now() };
-          // 落盘供下次启动使用（写失败被 store 吞掉，源行为）
-          const key = account();
-          if (key !== undefined) {
-            savedCatalogs.set(key, {
-              source: 'workbuddy:catalog',
-              fetchedAtMs: Date.now(),
-              models,
-              ...(client.lastCatalog?.appVersion?.version === undefined
-                ? {}
-                : { appVersion: client.lastCatalog.appVersion.version }),
-            });
+      // 单飞：并发调用共享一次拉取（源 fetchCatalog 的 in-flight 语义）
+      if (this._inflightFetch !== undefined) return this._inflightFetch;
+      const run = (async () => {
+        const errors = [];
+        try {
+          const credential = await store.resolve();
+          await refreshAccount();
+          const models = await client.fetchModels(credential);
+          if (Array.isArray(models) && models.length > 0) {
+            catalog.set(models);
+            catalogSource = { source: 'live', fetchedAtMs: Date.now() };
+            // 落盘供下次启动使用（写失败被 store 吞掉，源行为）
+            const key = account();
+            if (key !== undefined) {
+              savedCatalogs.set(key, {
+                source: 'workbuddy:catalog',
+                fetchedAtMs: Date.now(),
+                models,
+                ...(client.lastCatalog?.appVersion?.version === undefined
+                  ? {}
+                  : { appVersion: client.lastCatalog.appVersion.version }),
+              });
+            }
           }
+          catalog.setVisible(true);
+        } catch (e) {
+          errors.push(e.message);
+          catalogSource = { source: catalogSource.source, error: e.message };
+          catalog.setVisible(true); // 至少暴露 fallback
+        } finally {
+          lastFetchAtMs = Date.now();
         }
-        catalog.setVisible(true);
-      } catch (e) {
-        errors.push(e.message);
-        catalogSource = { source: catalogSource.source, error: e.message };
-        catalog.setVisible(true); // 至少暴露 fallback
+        return { models: catalog.current(), errors };
+      })();
+      this._inflightFetch = run;
+      try {
+        return await run;
+      } finally {
+        if (this._inflightFetch === run) this._inflightFetch = undefined;
       }
-      return { models: catalog.current(), errors };
+    },
+
+    /**
+     * 凭据 sweep（源 syncVariant 语义）：账号变化 → 重拉目录；
+     * 目录仍非实时且距上次拉取超过 10 个周期 → 自动重试一次（失败的目录
+     * 不能因为启动时一次网络抖动就永远停在兜底名册上）。
+     */
+    startSweep() {
+      if (this._sweepTimer !== undefined) return;
+      let lastSeenAccount;
+      const pollMs = Number(process.env.RELAY_WB_POLL_MS) || 30_000;
+      const sweep = async () => {
+        try {
+          const current = await refreshAccount();
+          if (current !== lastSeenAccount) {
+            lastSeenAccount = current;
+            if (current !== undefined) return void (await this.refreshModels());
+          }
+          if (catalogSource.source !== 'live' && Date.now() - lastFetchAtMs >= pollMs * 10) {
+            await this.refreshModels();
+          }
+        } catch { /* sweep 不打断网关 */ }
+      };
+      this._sweepTimer = setInterval(() => void sweep(), pollMs);
+      this._sweepTimer.unref?.();
     },
 
     models() {
       return catalog.current();
     },
     async close() {
+      if (this._sweepTimer !== undefined) clearInterval(this._sweepTimer);
       await this.shim?.close();
     },
   };

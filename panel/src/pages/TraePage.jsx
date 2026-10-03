@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import ChannelLayout from '../components/ChannelLayout.jsx';
 import CreditsPanel from '../components/CreditsPanel.jsx';
 import ModelTable from '../components/ModelTable.jsx';
-import { CopyButton, Disclosure, EmptyState, LoadingBlock, Notice, Section, StatusPill, fmtCtx, fmtNum, fmtTime } from '../components/primitives.jsx';
+import { CopyButton, Disclosure, EmptyState, LoadingBlock, Notice, Section, StatusPill, Switch, fmtCtx, fmtNum, fmtTime } from '../components/primitives.jsx';
 import { AlertIcon, CalendarCheckIcon, PlaneIcon, RefreshIcon } from '../components/icons.jsx';
 import { api } from '../api.js';
 import { useAsyncData } from '../hooks.js';
@@ -12,13 +12,32 @@ const REGIONS = [
   { key: 'ai', label: '国际版' },
 ];
 
-/** Trae 通道页：登录态、额度、签到、模型目录 */
+/** Trae 通道页：登录态、账号切换、额度、签到、选集/预算、Raw Chat 诊断 */
 export default function TraePage({ region, onRegion }) {
   const { data, loading, error, reload } = useAsyncData(api.getTrae);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null); // {kind, text}
 
   const doc = data?.regions?.[region];
+  const prefs = doc?.prefs ?? {};
+
+  async function control(action, okText) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const out = await api.postTraeControl(region, action);
+      setNotice(out?.state === 'updated' || out?.state === 'cleared'
+        ? { kind: 'ok', text: okText ?? '已保存' }
+        : { kind: 'err', text: `操作失败：${out?.reason ?? out?.state ?? '未知原因'}` });
+      await reload();
+      return out;
+    } catch (e) {
+      setNotice({ kind: 'err', text: `操作失败：${e.message ?? e}` });
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function refresh() {
     setBusy(true);
@@ -53,6 +72,11 @@ export default function TraePage({ region, onRegion }) {
   }
 
   const signedIn = doc?.status === 'signed-in';
+  const channelEnabled = prefs.enabled !== false;
+  // 模型选集语义（源）：空集 = 全部启用。切换时按全集展开，避免"空集关掉一个变成全关"。
+  const allIds = (doc?.models ?? []).map((m) => m.id);
+  const effectiveEnabled = new Set(prefs.modelSelection?.length ? prefs.modelSelection : allIds);
+  const effectiveImage = new Set(prefs.imageSelection ?? []);
 
   return (
     <ChannelLayout
@@ -72,6 +96,11 @@ export default function TraePage({ region, onRegion }) {
       {loading && !doc && <div className="section"><LoadingBlock lines={4} tall /></div>}
       {error && !doc && <Notice kind="err">{error}</Notice>}
 
+      {doc && !channelEnabled && (
+        <Notice kind="info">
+          该区域已在下方设置中停用：模型不出现在 /v1/models，调用会被拒绝。
+        </Notice>
+      )}
       {doc && !signedIn && (
         <Section>
           <EmptyState
@@ -96,6 +125,23 @@ export default function TraePage({ region, onRegion }) {
           {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
           <Section title="额度" actions={doc.accountName && <span className="section-hint">账号 <code className="inline">{doc.accountName}</code>{doc.tokenExpiresAtMs && <> · 令牌到期 {fmtTime(doc.tokenExpiresAtMs)}</>}</span>}>
+            {/* 多账号时给出切换（源 accounts.{cn,ai} 选择语义；选择持久化在网关侧） */}
+            {doc.accounts?.length > 1 && (
+              <div className="setting-row" style={{ marginBottom: 12 }}>
+                <span className="desc">使用账号</span>
+                {doc.accounts.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className={`btn sm ${a.selected ? 'primary' : ''}`}
+                    disabled={busy || a.selected}
+                    onClick={() => control({ action: 'select-account', accountId: a.id }, `已切换到 ${a.accountName}`)}
+                  >
+                    {a.accountName}{a.selected ? ' ✓' : ''}
+                  </button>
+                ))}
+              </div>
+            )}
             {region === 'cn' ? (
               <CreditsPanel
                 metrics={[
@@ -110,9 +156,7 @@ export default function TraePage({ region, onRegion }) {
               />
             ) : (
               <CreditsPanel
-                unavailable={doc.payStatus
-                  ? '国际版订阅状态正常（上游不提供积分明细）'
-                  : undefined}
+                unavailable={doc.payStatus ? '国际版订阅状态正常（上游不提供积分明细）' : undefined}
                 error={doc.payStatusError}
               />
             )}
@@ -138,27 +182,133 @@ export default function TraePage({ region, onRegion }) {
             )}
           </Section>
 
-          <Section title="模型" count={`${(doc.models ?? []).length}`}>
+          <Section
+            title="模型"
+            count={`${(doc.models ?? []).length}`}
+            hint={<span className="section-hint">选集与图片开关只影响对话；ID 始终可复制</span>}
+          >
             <ModelTable
               models={doc.models}
               columns={[
                 { key: 'ctx', label: '上下文', numeric: true, render: (m) => fmtCtx(m.contextWindow) ?? '—' },
                 { key: 'rate', label: '倍率', numeric: true, render: (m) => (typeof m.creditMultiplier === 'number' ? `x${m.creditMultiplier}` : '—') },
-                { key: 'img', label: '图片', render: (m) => (m.input?.includes('image') ? '支持' : '—') },
+                {
+                  key: 'img',
+                  label: '图片',
+                  render: (m) => (
+                    <Switch
+                      checked={effectiveImage.has(m.id)}
+                      disabled={busy}
+                      label={`图片输入 ${m.id}`}
+                      onChange={(on) => {
+                        const next = new Set(effectiveImage);
+                        if (on) next.add(m.id); else next.delete(m.id);
+                        control({ action: 'set-image-selection', models: [...next] }, '图片选集已保存');
+                      }}
+                    />
+                  ),
+                },
+                {
+                  key: 'enabled',
+                  label: '启用',
+                  render: (m) => (
+                    <Switch
+                      checked={effectiveEnabled.has(m.id)}
+                      disabled={busy}
+                      label={`启用 ${m.id}`}
+                      onChange={(on) => {
+                        const next = new Set(effectiveEnabled);
+                        if (on) next.add(m.id); else next.delete(m.id);
+                        // 全关时退回空集（源语义：空选集 = 全要），避免整条通道悄悄失能
+                        const ids = next.size === 0 ? [] : [...next];
+                        control({ action: 'set-model-selection', models: ids.length === allIds.length ? [] : ids }, '模型选集已保存');
+                      }}
+                    />
+                  ),
+                },
               ]}
             />
           </Section>
 
-          {(doc.rawChat || doc.accounts?.length > 1) && (
-            <Disclosure summary="通道诊断">
-              {doc.rawChat && <p className="small dim" style={{ margin: 0 }}>Raw Chat 通道：{doc.rawChat.state ?? '未知'}（默认关闭，不影响常规对话）</p>}
-              {doc.accounts?.length > 1 && (
-                <p className="small dim" style={{ margin: 0 }}>本机共登录 {doc.accounts.length} 个 Trae 账号，当前使用 {doc.accountName}。</p>
-              )}
-            </Disclosure>
-          )}
+          <Disclosure summary="通道设置与诊断">
+            <div className="setting-row">
+              <div className="grow">
+                <div>启用该区域</div>
+                <div className="desc">关闭后 Trae {region === 'cn' ? '国内版' : '国际版'}的模型不再出现在 /v1/models，调用返回 404</div>
+              </div>
+              <Switch
+                checked={channelEnabled}
+                disabled={busy}
+                label="启用该区域"
+                onChange={(on) => control({ action: 'set-enabled', enabled: on }, on ? '区域已启用' : '区域已停用')}
+              />
+            </div>
+            <ContextBudgetEditor budgets={prefs.contextBudgets ?? {}} models={doc.models ?? []} busy={busy} onSave={(b) => control({ action: 'set-context-budgets', budgets: b }, '上下文预算已保存')} />
+            {doc.rawChat && (
+              <p className="small dim" style={{ margin: 0 }}>
+                Raw Chat 网关（CN）：{doc.rawChat.state ?? '未知'}{doc.rawChat.reason ? ` · ${doc.rawChat.reason}` : ''}
+                {doc.rawChat.state !== 'enabled' && doc.rawChat.state !== 'available' ? '（不可用时自动走原生 SOLO 通道）' : ''}
+              </p>
+            )}
+            <button type="button" className="btn sm" disabled={busy} onClick={() => control({ action: 'logout' }, '已清除网关保存的凭据副本')}>
+              清除凭据副本（logout）
+            </button>
+          </Disclosure>
         </>
       )}
     </ChannelLayout>
+  );
+}
+
+/** 每模型上下文预算（源 contextBudgets 配置；留空 = 跟随上游） */
+function ContextBudgetEditor({ budgets, models, busy, onSave }) {
+  const [draft, setDraft] = useState(null);
+  const value = draft ?? budgets;
+  return (
+    <div className="setting-row" style={{ alignItems: 'flex-start' }}>
+      <div className="grow">
+        <div>上下文预算</div>
+        <div className="desc">按模型覆盖对话时的上下文窗口（token 数），留空跟随上游</div>
+        <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+          {models.map((m) => (
+            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <code className="inline" style={{ minWidth: 160 }}>{m.id}</code>
+              <input
+                value={value[m.id] ?? ''}
+                onChange={(e) => {
+                  const next = { ...value };
+                  if (e.target.value === '') delete next[m.id];
+                  else next[m.id] = e.target.value;
+                  setDraft(next);
+                }}
+                placeholder="默认"
+                inputMode="numeric"
+                style={{
+                  width: 110, background: 'var(--panel-2)', border: '1px solid var(--line)',
+                  borderRadius: 6, color: 'var(--text)', padding: '3px 8px', font: '13px var(--mono)',
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="btn sm"
+          style={{ marginTop: 8 }}
+          disabled={busy}
+          onClick={() => {
+            const clean = {};
+            for (const [k, v] of Object.entries(value)) {
+              const n = Number(v);
+              if (v !== '' && Number.isFinite(n) && n >= 1) clean[k] = Math.floor(n);
+            }
+            setDraft(null);
+            onSave(clean);
+          }}
+        >
+          保存预算
+        </button>
+      </div>
+    </div>
   );
 }

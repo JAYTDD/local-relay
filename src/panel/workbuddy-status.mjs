@@ -136,6 +136,11 @@ export function createWorkBuddyStatus({ providers }) {
         ...visibilityField,
         ...probeField,
         models,
+        // 设置面状态（源卡片的开关项）
+        maximumContext: liveProvider.maximumContext
+          ? { supported: liveProvider.maximumContext.supported, enabled: liveProvider.maximumContext.get() }
+          : undefined,
+        probeConsent: liveProvider.probeConsent?.get() ?? false,
       };
     },
 
@@ -200,11 +205,21 @@ export function createWorkBuddyStatus({ providers }) {
           return { state: 'failed', reason: String(e?.message ?? e) };
         }
       }
-      if (kind === 'clear' || kind === 'set-maximum-context-window') {
-        return {
-          state: 'failed',
-          reason: `action not wired yet: ${kind} (needs probe/max-context service, see docs/superpowers/plans/2026-10-02-local-relay-remaining-port.md)`,
-        };
+      if (kind === 'clear') {
+        // 源语义：显式 clear 动作 = 清空全部账号的探针记录
+        if (!entry.provider.clearProbe) {
+          return { state: 'failed', reason: 'action not wired yet: clear (needs probe store)' };
+        }
+        return entry.provider.clearProbe();
+      }
+      if (kind === 'set-maximum-context-window') {
+        return entry.provider.maximumContext.set(action.enabled === true);
+      }
+      if (kind === 'set-probe-consent') {
+        return entry.provider.probeConsent.set(action.enabled === true);
+      }
+      if (kind === 'logout') {
+        return entry.provider.logout();
       }
       return { state: 'failed', reason: `unknown action: ${String(kind)}` };
     },

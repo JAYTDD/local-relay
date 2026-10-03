@@ -59,10 +59,26 @@ async function readBody(req, limit = 64 * 1024 * 1024) {
   return Buffer.concat(chunks);
 }
 
+/** 通道是否对外服务（Trae 的区域启停；关闭的区域不列模型也不路由） */
+function serving(entry) {
+  return entry.provider?.enabled?.() !== false;
+}
+
+/**
+ * 取通道当前目录。entry.models 是启动快照；选集/可见性变化后 provider 里的
+ * catalog 才是权威，所以每次取用都同步回 entry（health/面板也读它）。
+ */
+function currentModels(entry) {
+  const live = entry.provider?.models?.();
+  if (live !== undefined) entry.models = live;
+  return entry.models;
+}
+
 function listModels() {
   const data = [];
   for (const p of state.providers) {
-    for (const m of p.models) {
+    if (!serving(p)) continue;
+    for (const m of currentModels(p)) {
       data.push({
         id: `${p.def.prefix}/${m.id}`,
         object: 'model',
@@ -232,7 +248,8 @@ async function handleChat(req, res) {
     return json(res, 400, { error: { message: `Invalid JSON body: ${e.message}` } });
   }
   const modelId = body.model;
-  const hit = resolveModel(state.providers, modelId);
+  for (const p of state.providers) currentModels(p);
+  const hit = resolveModel(state.providers.filter(serving), modelId);
   if (!hit) {
     return json(res, 404, {
       error: {
@@ -296,7 +313,17 @@ const server = http.createServer(async (req, res) => {
       if (served) return;
     }
     if (req.method === 'GET' && (pathname === '/healthz' || pathname === '/health')) {
-      return json(res, 200, { ok: true, ready: state.ready, providers: state.providers.map((p) => ({ id: p.def.prefix, label: p.def.label, models: p.models.length, error: p.error })) });
+      return json(res, 200, {
+        ok: true,
+        ready: state.ready,
+        providers: state.providers.map((p) => ({
+          id: p.def.prefix,
+          label: p.def.label,
+          models: p.models.length,
+          ...(p.provider?.enabled?.() === false ? { enabled: false } : {}),
+          error: p.error,
+        })),
+      });
     }
     if (!authorized(req)) return json(res, 401, { error: { message: 'Unauthorized' } });
     if (req.method === 'GET' && (pathname === '/v1/models' || pathname === '/v1/models/')) {
@@ -322,6 +349,8 @@ async function boot() {
       entry.provider = provider;
       entry.shim = provider.shim;
       entry.models = provider.models();
+      // WB/Qoder 的凭据 sweep：账号变化自动重拉目录、失败目录自动重试（源 syncVariant 语义）
+      provider.startSweep?.();
       console.log(`✅ ${def.label.padEnd(18)} 模型 ${String(entry.models.length).padStart(3)} 个`);
     } catch (e) {
       entry.error = e.message;

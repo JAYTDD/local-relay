@@ -102,13 +102,11 @@ export function createQoderStatus({ providers }) {
         creditsField = { creditsError: String(e?.message ?? e) };
       }
 
-      // 签到状态（只读读取，不领取）
+      // 签到：只读记录（源 status 路由读 JsonFileCheckInStore）。绝不因面板
+      // 打开就调 client.checkIn()——那是领取动作（内部走 claimCampaign），
+      // 旧版把 GET 变成了写操作，是审计时揪出的 bug。领取走 control 的 checkin。
       let checkInField = {};
-      try {
-        if (live.client?.checkIn) checkInField = { checkIn: await live.client.checkIn() };
-      } catch (e) {
-        checkInField = { checkInError: String(e?.message ?? e) };
-      }
+      if (live.checkInStatus) checkInField = { checkIn: live.checkInStatus() };
 
       // 探针区（同 WorkBuddy 语义：候选 = 支持推理但上游未声明 effort 集）
       let probeField = {};
@@ -145,7 +143,66 @@ export function createQoderStatus({ providers }) {
         ...checkInField,
         ...probeField,
         models,
+        // 设置面状态（源卡片的开关项与签到调度）
+        maximumContext: { enabled: live.prefs.get().useMaximumContextWindow !== false },
+        probeConsent: live.prefs.get().probeConsent === true,
+        disabledModels: live.prefs.get().disabledModels ?? [],
+        modelContextWindows: live.prefs.get().modelContextWindows ?? {},
+        autoCheckIn: {
+          enabled: live.prefs.get().autoCheckIn === true,
+          checkInMinute: live.prefs.get().checkInMinute ?? 600,
+        },
+        checkInLog: live.checkInStatus(),
       };
+    },
+
+    /**
+     * 面板写操作（源 probe-route 的 action 面 + 签到调度设置）。
+     * 未装配的能力明确失败，绝不静默成功。
+     */
+    async control(variant, action) {
+      const entry = providerFor(providers(), variant);
+      if (!entry) return { state: 'failed', reason: `variant not configured: ${variant}` };
+      if (!entry.provider) return { state: 'failed', reason: entry.error ?? 'provider unavailable' };
+      const provider = entry.provider;
+      switch (action?.action) {
+        case 'checkin':
+          return provider.checkIn();
+        case 'clear-checkin-logs':
+          return provider.clearCheckInLogs();
+        case 'clear':
+          return provider.clearProbe();
+        case 'set-maximum-context-window':
+          return provider.setMaximumContextWindow(action.enabled === true);
+        case 'set-models-enabled': {
+          const models = Array.isArray(action.models)
+            ? action.models.filter((m) => typeof m === 'string' && m.trim() !== '')
+            : typeof action.model === 'string' && action.model.trim() !== ''
+              ? [action.model.trim()]
+              : [];
+          if (models.length === 0) return { state: 'failed', reason: 'set-models-enabled requires model ids' };
+          return provider.setModelsEnabled({ models, enabled: action.enabled === true });
+        }
+        case 'set-model-context-windows':
+          if (action.windows === undefined || typeof action.windows !== 'object' || Array.isArray(action.windows)) {
+            return { state: 'failed', reason: 'set-model-context-windows requires windows object' };
+          }
+          return provider.setModelContextWindows(action.windows);
+        case 'set-probe-consent':
+          return provider.setProbeConsent(action.enabled === true);
+        case 'set-auto-checkin':
+          return provider.setAutoCheckIn(action.enabled === true);
+        case 'set-checkin-minute':
+          return provider.setCheckInMinute(action.minute);
+        case 'save-pat':
+          return provider.savePat(action.pat);
+        case 'clear-pat':
+          return provider.clearPat();
+        case 'logout':
+          return provider.logout();
+        default:
+          return { state: 'failed', reason: `unknown action: ${String(action?.action)}` };
+      }
     },
 
     /** 手动探测一个模型的推理 effort（会真发上游请求并消耗额度） */
