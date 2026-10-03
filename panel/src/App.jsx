@@ -1,80 +1,111 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useHashRoute } from './router.jsx';
 import { api } from './api.js';
-import ChannelHealth from './components/ChannelHealth.jsx';
-import TraeCard from './components/TraeCard.jsx';
-import WorkBuddyCard from './components/WorkBuddyCard.jsx';
-import QoderCard from './components/QoderCard.jsx';
+import { BriefcaseIcon, GaugeIcon, PlaneIcon, TerminalIcon } from './components/icons.jsx';
+import { Notice } from './components/primitives.jsx';
+import OverviewPage from './pages/OverviewPage.jsx';
+import TraePage from './pages/TraePage.jsx';
+import WorkBuddyPage from './pages/WorkBuddyPage.jsx';
+import QoderPage from './pages/QoderPage.jsx';
 
+const NAV = [
+  { key: 'overview', label: '总览', Icon: GaugeIcon },
+  { key: 'trae', label: 'Trae', Icon: PlaneIcon, prefixes: ['trae', 'traeg'] },
+  { key: 'workbuddy', label: 'WorkBuddy', Icon: BriefcaseIcon, prefixes: ['wb', 'wbai'] },
+  { key: 'qoder', label: 'Qoder', Icon: TerminalIcon, prefixes: ['qoder', 'qoderg'] },
+];
+
+/**
+ * 应用外壳：左侧导航 + hash 路由。
+ * 健康度（轻量接口）在这里取一次给导航状态点用；各通道页自己拉详细文档。
+ */
 export default function App() {
+  const { route, query, navigate, replaceQuery } = useHashRoute();
   const [health, setHealth] = useState(null);
-  const [trae, setTrae] = useState(null);
-  const [wb, setWb] = useState(null);
-  const [qoder, setQoder] = useState(null);
   const [error, setError] = useState('');
 
-  const loadTrae = useCallback(async () => { setTrae(await api.getTrae()); }, []);
-  const loadWb = useCallback(async () => { setWb(await api.getWorkBuddy()); }, []);
-  const loadQoder = useCallback(async () => { setQoder(await api.getQoder()); }, []);
-
-  const reload = useCallback(async () => {
+  const reloadHealth = useCallback(async () => {
     try {
+      setHealth(await api.getHealth());
       setError('');
-      const [h] = await Promise.all([api.getHealth(), loadTrae(), loadWb(), loadQoder()]);
-      setHealth(h);
     } catch (e) {
       setError(String(e.message ?? e));
     }
-  }, [loadTrae, loadWb, loadQoder]);
+  }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reloadHealth(); }, [reloadHealth]);
 
-  const refreshTrae = useCallback(async (region) => {
-    await api.postTraeRefresh(region);
-    await loadTrae();
-  }, [loadTrae]);
+  /** 通道页数据变化后回读健康度，导航状态点保持真实 */
+  const onChannelChanged = useCallback(() => { reloadHealth(); }, [reloadHealth]);
 
-  const checkinTrae = useCallback(async (region) => {
-    const out = await api.postTraeCheckin(region);
-    await loadTrae();
-    return out;
-  }, [loadTrae]);
+  const statusOf = (item) => {
+    if (!item.prefixes || !health) return 'ok';
+    const entries = health.providers.filter((p) => item.prefixes.includes(p.prefix));
+    if (entries.length === 0) return 'ok';
+    if (entries.some((p) => p.error)) return 'err';
+    return 'ok';
+  };
 
-  const controlWb = useCallback(async (variant, action) => {
-    const out = await api.postWorkBuddyControl(variant, action);
-    await loadWb();
-    return out;
-  }, [loadWb]);
-
-  const probeWb = useCallback(async (variant, model) => {
-    const out = await api.postWorkBuddyProbe(variant, model);
-    await loadWb();
-    return out;
-  }, [loadWb]);
-
-  const refreshQoder = useCallback(async (variant) => {
-    const out = await api.postQoderRefresh(variant);
-    await loadQoder();
-    return out;
-  }, [loadQoder]);
-
-  const probeQoder = useCallback(async (variant, model) => {
-    const out = await api.postQoderProbe(variant, model);
-    await loadQoder();
-    return out;
-  }, [loadQoder]);
+  const pageProps = { navigate, onChannelChanged };
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>local-relay 控制面板</h1>
-        <p className="muted">本地订阅中转网关 · Trae / WorkBuddy / Qoder</p>
-      </header>
-      {error && <div className="banner err">{error}</div>}
-      <main className="app-body">
-        <ChannelHealth health={health} />
-        <TraeCard data={trae} onRefresh={refreshTrae} onCheckin={checkinTrae} />
-        <WorkBuddyCard data={wb} onControl={controlWb} onProbe={probeWb} />
-        <QoderCard data={qoder} onRefresh={refreshQoder} onProbe={probeQoder} />
+      <nav className="sidebar">
+        <div className="brand">
+          <span className="brand-mark"><GaugeIcon size={18} /></span>
+          <div>
+            <div className="brand-name">local-relay</div>
+            <div className="brand-sub">本地订阅中转网关</div>
+          </div>
+        </div>
+        {NAV.map(({ key, label, Icon, prefixes }) => {
+          const count = prefixes && health
+            ? health.providers.filter((p) => prefixes.includes(p.prefix)).reduce((n, p) => n + p.models, 0)
+            : undefined;
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`nav-item ${route === key ? 'active' : ''}`}
+              onClick={() => navigate(key)}
+              aria-current={route === key ? 'page' : undefined}
+            >
+              <span className="nav-icon"><Icon size={17} /></span>
+              <span className="nav-label">{label}</span>
+              {count !== undefined && count > 0 && <span className="nav-count">{count}</span>}
+              <span className={`nav-dot ${statusOf({ prefixes })}`} />
+            </button>
+          );
+        })}
+        <div className="sidebar-foot">
+          <span className="k">网关端点</span>
+          <span className="v">{window.location.host}/v1</span>
+          <span className="k" style={{ marginTop: 4 }}>协议</span>
+          <span className="v">OpenAI 兼容</span>
+        </div>
+      </nav>
+
+      <main className="content">
+        {error && <Notice kind="err">网关健康度读取失败：{error}</Notice>}
+        {route === 'overview' && <OverviewPage health={health} navigate={navigate} />}
+        {route === 'trae' && (
+          <TraePage
+            region={query.r === 'ai' ? 'ai' : 'cn'}
+            onRegion={(r) => { replaceQuery({ r }); onChannelChanged(); }}
+          />
+        )}
+        {route === 'workbuddy' && (
+          <WorkBuddyPage
+            variant={query.r === 'global' ? 'global' : 'cn'}
+            onVariant={(r) => { replaceQuery({ r }); onChannelChanged(); }}
+          />
+        )}
+        {route === 'qoder' && (
+          <QoderPage
+            variant={query.r === 'global' ? 'global' : 'cn'}
+            onVariant={(r) => { replaceQuery({ r }); onChannelChanged(); }}
+          />
+        )}
       </main>
     </div>
   );
