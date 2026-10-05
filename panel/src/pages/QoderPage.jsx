@@ -327,8 +327,8 @@ export default function QoderPage({ variant, onVariant, onChannelChanged }) {
                   }
                 }}
                 style={{
-                  width: 90, background: 'var(--panel-2)', border: '1px solid var(--line)',
-                  borderRadius: 6, color: 'var(--text)', padding: '4px 8px', font: '13px var(--mono)',
+                  width: 96, background: 'var(--panel-2)', border: '1px solid var(--line)',
+                  borderRadius: 6, color: 'var(--text)', padding: '4px 8px', font: '14px var(--mono)',
                 }}
               />
             </div>
@@ -363,7 +363,7 @@ function PatEditor({ busy, onSave, onClear, clearLabel = '清除副本' }) {
             spellCheck={false}
             style={{
               flex: 1, background: 'var(--panel-2)', border: '1px solid var(--line)',
-              borderRadius: 6, color: 'var(--text)', padding: '5px 10px', font: '13px var(--mono)',
+              borderRadius: 6, color: 'var(--text)', padding: '5px 10px', font: '14px var(--mono)',
             }}
           />
           <button

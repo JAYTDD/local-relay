@@ -274,7 +274,7 @@ function ContextBudgetEditor({ budgets, models, busy, onSave }) {
         <div className="desc">按模型覆盖对话时的上下文窗口（token 数），留空跟随上游</div>
         <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
           {models.map((m) => (
-            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
               <code className="inline" style={{ minWidth: 160 }}>{m.id}</code>
               <input
                 value={value[m.id] ?? ''}
@@ -288,7 +288,7 @@ function ContextBudgetEditor({ budgets, models, busy, onSave }) {
                 inputMode="numeric"
                 style={{
                   width: 110, background: 'var(--panel-2)', border: '1px solid var(--line)',
-                  borderRadius: 6, color: 'var(--text)', padding: '3px 8px', font: '13px var(--mono)',
+                  borderRadius: 6, color: 'var(--text)', padding: '3px 8px', font: '14px var(--mono)',
                 }}
               />
             </label>
