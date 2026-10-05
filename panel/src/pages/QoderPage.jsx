@@ -29,6 +29,14 @@ function minuteLabel(minute) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} (UTC+8)`;
 }
 
+/** 今日（UTC+8）日期串，与后端调度器的判定一致 */
+function beijingToday() {
+  return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** 记录显示这些状态且是今天的 → 视为"今日已结算"，按钮禁用 */
+const SETTLED_STATUSES = ['claimed', 'already-claimed', 'no-campaign'];
+
 /** 上下文列：默认窗口，若有更大的可扩展窗口则以 200K / 1M 形式并列 */
 function qoderCtx(m) {
   const def = fmtCtx(m.contextWindow);
@@ -97,9 +105,32 @@ export default function QoderPage({ variant, onVariant }) {
     }
   }
 
+  /** 手动签到：结果按源状态语义给精确反馈（claimed/already-claimed/no-campaign/error） */
+  async function claim() {
+    setBusy('checkin');
+    setNotice(null);
+    try {
+      const out = await api.postQoderControl(variant, { action: 'checkin' });
+      if (out?.state === 'claimed') setNotice({ kind: 'ok', text: `签到成功${out?.amount ? `，+${out.amount} 算力` : ''}` });
+      else if (out?.state === 'already-claimed') setNotice({ kind: 'info', text: '今日已领取过，明天再来' });
+      else if (out?.state === 'no-campaign') setNotice({ kind: 'info', text: '今日没有可领取的签到活动' });
+      else setNotice({ kind: 'err', text: `签到失败：${out?.reason ?? out?.state ?? '未知原因'}` });
+      await reload();
+    } catch (e) {
+      setNotice({ kind: 'err', text: `签到失败：${e.message ?? e}` });
+    } finally {
+      setBusy('');
+    }
+  }
+
   const disabledModels = new Set(doc?.disabledModels ?? []);
   const log = doc?.checkInLog;
   const record = log?.checkin;
+  // 源签到结果语义：claimed/already-claimed/no-campaign 都是"今天已结算"，
+  // 只有 error 允许当天重试。此前移植丢了这条判定，按钮永远可点。
+  const settled = Boolean(
+    record && record.lastDate === beijingToday() && SETTLED_STATUSES.includes(record.lastStatus),
+  );
 
   return (
     <ChannelLayout
@@ -165,10 +196,12 @@ export default function QoderPage({ variant, onVariant }) {
               <button
                 type="button"
                 className="btn primary sm"
-                disabled={busy !== '' || !configured}
-                onClick={() => control({ action: 'checkin' }, '签到完成')}
+                disabled={busy !== '' || !configured || settled}
+                onClick={claim}
               >
-                立即领取
+                {settled
+                  ? (record.lastStatus === 'no-campaign' ? '今日无可领' : '今日已领')
+                  : '立即领取'}
               </button>
             </div>
           </Section>
