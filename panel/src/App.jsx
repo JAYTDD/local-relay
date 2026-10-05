@@ -37,6 +37,12 @@ export default function App() {
 
   useEffect(() => { reloadHealth(); }, [reloadHealth]);
 
+  // 周期轮询：sweep 在后台刷新目录、凭据可能过期，总览/侧边栏要跟着实际情况走
+  useEffect(() => {
+    const timer = setInterval(() => { reloadHealth(); }, 30_000);
+    return () => clearInterval(timer);
+  }, [reloadHealth]);
+
   /** 通道页数据变化后回读健康度，导航状态点保持真实 */
   const onChannelChanged = useCallback(() => { reloadHealth(); }, [reloadHealth]);
 
