@@ -5,8 +5,9 @@ import { InboxIcon, SearchIcon } from './icons.jsx';
 /**
  * 模型列表：搜索过滤 + 点击 ID 复制。
  * columns: [{ key, label, numeric?, render(m) }] 由各通道页决定额外列。
+ * rowClass(m) 返回额外的行类名（如停用/隐藏行变灰）。
  */
-export default function ModelTable({ models, columns = [], emptyText = '未发现模型' }) {
+export default function ModelTable({ models, columns = [], emptyText = '未发现模型', rowClass }) {
   const [kw, setKw] = useState('');
   const keyword = kw.trim().toLowerCase();
 
@@ -55,7 +56,7 @@ export default function ModelTable({ models, columns = [], emptyText = '未发�
             </thead>
             <tbody>
               {rows.map((m) => (
-                <tr key={m.id}>
+                <tr key={m.id} className={rowClass?.(m) || undefined}>
                   <td>
                     <CopyButton className="model-id" value={m.id}>
                       {m.id}

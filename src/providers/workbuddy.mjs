@@ -317,7 +317,23 @@ export async function createWorkBuddyProvider(variantId) {
       this._sweepTimer.unref?.();
     },
 
+    /**
+     * 对话服务目录：按当前账号的可见性偏好过滤（源语义——隐藏的模型
+     * 不对 DSH 提供）。此前只写偏好不过滤，"隐藏"实际没生效。
+     */
     models() {
+      const rows = catalog.current();
+      try {
+        const key = account();
+        if (key !== undefined) {
+          const hidden = new Set(visibility.disabled(key));
+          if (hidden.size > 0) return rows.filter((m) => !hidden.has(m.id));
+        }
+      } catch { /* 偏好读不到就不过滤 */ }
+      return rows;
+    },
+    /** 面板展示用全量目录（含已隐藏），否则隐藏后行消失、无法再显示 */
+    displayModels() {
       return catalog.current();
     },
     async close() {

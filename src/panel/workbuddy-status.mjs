@@ -61,7 +61,9 @@ export function createWorkBuddyStatus({ providers }) {
           reason: entry.error ?? 'provider unavailable',
         };
       }
-      const models = (liveProvider.models?.() ?? entry.models ?? []).map(toModelRow);
+      // 面板展示全量目录（含已隐藏）；隐藏过滤只作用于对话服务（provider.models()）。
+      // 用全量做登录态判定：把模型全部隐藏不该被误报成"未登录"。
+      const models = (liveProvider.displayModels?.() ?? liveProvider.models?.() ?? entry.models ?? []).map(toModelRow);
       const signedIn = models.length > 0;
 
       // 目录来源（源 workBuddyWebStatus 的 catalogSection）：面板要能说明这批模型

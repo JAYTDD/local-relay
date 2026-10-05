@@ -86,7 +86,9 @@ export function createQoderStatus({ providers }) {
         };
       }
 
-      const models = (live.models?.() ?? entry.models ?? []).map(toModelRow);
+      // 面板要展示全量目录（含已停用），否则停用的行消失后无法再启用；
+      // current() 是源类语义（剔停用），只用于对话路由。
+      const models = (live.displayModels?.() ?? live.models?.() ?? entry.models ?? []).map(toModelRow);
 
       // 目录来源
       let catalogField = {};

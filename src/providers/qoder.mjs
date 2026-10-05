@@ -313,6 +313,13 @@ export async function createQoderProvider(variantId) {
     models() {
       return catalog.current();
     },
+    /**
+     * 面板展示用全量目录。catalog.current() 会剔除停用模型（源类语义），
+     * 面板若也用它，停用的行会直接消失、永远无法再启用——必须用 all()。
+     */
+    displayModels() {
+      return catalog.all();
+    },
 
     /* ---------- 面板写操作（对应源 probe-route 的 action 面） ---------- */
 

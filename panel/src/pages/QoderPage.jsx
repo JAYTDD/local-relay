@@ -182,6 +182,7 @@ export default function QoderPage({ variant, onVariant }) {
           >
             <ModelTable
               models={doc.models}
+              rowClass={(m) => (disabledModels.has(m.id) ? 'row-off' : '')}
               columns={[
                 { key: 'ctx', label: '上下文', numeric: true, render: qoderCtx },
                 { key: 'reason', label: '推理', render: (m) => (m.isReasoning ? <span className="tag reasoning">{m.reasoningEfforts?.length ? m.reasoningEfforts.join('、') : '支持'}</span> : '—') },

@@ -170,6 +170,7 @@ export default function WorkBuddyPage({ variant, onVariant }) {
           >
             <ModelTable
               models={doc.models}
+              rowClass={(m) => (disabled.has(m.id) ? 'row-off' : '')}
               columns={[
                 { key: 'rate', label: '倍率', numeric: true, render: (m) => fmtRate(m.credits) ?? (m.rateUnknown ? '未知' : '—') },
                 { key: 'free', label: '计费', render: (m) => (m.free ? <span className="tag free">免费</span> : '—') },

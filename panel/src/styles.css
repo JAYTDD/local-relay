@@ -256,6 +256,9 @@ body {
 .model-id:hover .copy-hint, .model-id.copied .copy-hint { opacity: 1; }
 .model-id.copied { color: var(--accent); }
 .model-name { color: var(--text-2); }
+/* 停用/隐藏的模型行：压暗但保留（开关还能打开） */
+tr.row-off { opacity: 0.55; }
+tr.row-off td.model-name { text-decoration: line-through; text-decoration-color: var(--text-3); }
 
 /* ---------- 工具行 / 表单 ---------- */
 
