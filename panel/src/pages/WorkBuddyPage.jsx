@@ -42,6 +42,24 @@ export default function WorkBuddyPage({ variant, onVariant, onChannelChanged }) 
     }
   }
 
+  async function refresh() {
+    setBusy('刷新目录');
+    setNotice(null);
+    try {
+      const out = await api.postWorkBuddyControl(variant, { action: 'refresh' });
+      const errs = (out?.errors ?? []).filter(Boolean);
+      setNotice(errs.length > 0
+        ? { kind: 'err', text: `目录已更新，但有告警：${errs.join('；')}` }
+        : { kind: 'ok', text: `目录已更新（${(out?.models ?? []).length} 个模型）` });
+      await reload();
+      onChannelChanged?.();
+    } catch (e) {
+      setNotice({ kind: 'err', text: `刷新失败：${e.message ?? e}` });
+    } finally {
+      setBusy('');
+    }
+  }
+
   async function probe(modelId) {
     setBusy(`探测 ${modelId}`);
     setNotice(null);
@@ -105,7 +123,7 @@ export default function WorkBuddyPage({ variant, onVariant, onChannelChanged }) 
           type="button"
           className="btn"
           disabled={busy !== '' || !doc}
-          onClick={() => control({ action: 'refresh' }, '刷新目录', `目录已更新（${(doc?.models ?? []).length} 个模型）`)}
+          onClick={refresh}
         >
           <RefreshIcon size={14} /> 刷新目录
         </button>

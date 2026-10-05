@@ -317,7 +317,12 @@ export default function QoderPage({ variant, onVariant, onChannelChanged }) {
                 disabled={busy !== ''}
                 onBlur={(e) => {
                   const v = Number(e.target.value);
-                  if (Number.isInteger(v) && v >= 0 && v <= 1439 && v !== (doc.autoCheckIn?.checkInMinute ?? 600)) {
+                  // 非法值给即时反馈，不静默忽略（后端同款校验兜底）
+                  if (!Number.isInteger(v) || v < 0 || v > 1439) {
+                    setNotice({ kind: 'err', text: '签到时刻需为 0–1439 的整数' });
+                    return;
+                  }
+                  if (v !== (doc.autoCheckIn?.checkInMinute ?? 600)) {
                     control({ action: 'set-checkin-minute', minute: v }, '签到时刻已保存');
                   }
                 }}
@@ -330,11 +335,9 @@ export default function QoderPage({ variant, onVariant, onChannelChanged }) {
             <PatEditor
               busy={busy !== ''}
               onSave={(pat) => control({ action: 'save-pat', pat }, 'PAT 已保存并刷新目录')}
-              onClear={() => control({ action: 'clear-pat' }, '已清除网关保存的 PAT 副本')}
+              onClear={() => control({ action: 'logout' }, '已登出并清除凭据副本')}
+              clearLabel="登出并清除副本"
             />
-            <button type="button" className="btn sm" disabled={busy !== ''} onClick={() => control({ action: 'logout' }, '已登出并清除凭据副本')}>
-              登出（清除凭据副本）
-            </button>
           </Disclosure>
         </>
       )}
@@ -343,7 +346,7 @@ export default function QoderPage({ variant, onVariant, onChannelChanged }) {
 }
 
 /** PAT 管理（源 auth 路由的 save/clear；保存前由后端 validateApiKey 校验） */
-function PatEditor({ busy, onSave, onClear }) {
+function PatEditor({ busy, onSave, onClear, clearLabel = '清除副本' }) {
   const [value, setValue] = useState('');
   return (
     <div className="setting-row" style={{ alignItems: 'flex-start' }}>
@@ -372,7 +375,7 @@ function PatEditor({ busy, onSave, onClear }) {
             保存
           </button>
           <button type="button" className="btn sm" disabled={busy} onClick={onClear}>
-            清除副本
+            {clearLabel}
           </button>
         </div>
       </div>
