@@ -236,15 +236,9 @@ export function createTraeProvider(region) {
 
       // 插件语义：derive 结果为空则退回该区域的兜底名册（应用同一选集），
       // 且写进 catalog 的是 derive 后的结果（否则死模型会在下次启动复活）。
-      const derived = derive(merged);
-      const final = derived.length > 0
-        ? derived
-        : trae.applyImageSelection(trae.fallbackModelsFor(region), imageSet());
-
-      catalog.set(final);
-      // 面板管理目录（只剔死模型、不含选集）；首次发现前退回当前目录
-      this.lastDisplay = displayModels(merged);
-      return { models: final, display: this.lastDisplay, errors: lastErr };
+      // 合并目录留在 lastMerged：选集变化只需本地 derive，不必重新打上游。
+      this.lastMerged = merged;
+      return { ...this.applySelection(), errors: lastErr };
     },
     models() {
       return catalog.current();
@@ -252,6 +246,18 @@ export function createTraeProvider(region) {
     /** 面板展示用全量目录（选集只影响对话，管理界面要能看到全部） */
     displayModels() {
       return this.lastDisplay ?? catalog.current();
+    },
+    /** 用最近的合并目录重算对话/展示目录（选集只影响 derive，不需要重新打上游） */
+    applySelection() {
+      const merged = this.lastMerged;
+      if (merged === undefined) return this.refreshModels();
+      const derived = derive(merged);
+      const final = derived.length > 0
+        ? derived
+        : trae.applyImageSelection(trae.fallbackModelsFor(region), imageSet());
+      catalog.set(final);
+      this.lastDisplay = displayModels(merged);
+      return { models: final, display: this.lastDisplay };
     },
     /** 以下为面板写操作；每项都落盘偏好并立即生效（源 applySelection 语义） */
     async selectAccount(accountId) {
@@ -268,12 +274,12 @@ export function createTraeProvider(region) {
     async setModelSelection(ids) {
       prefs.patch({ enabledModelIds: Array.isArray(ids) ? ids.filter((x) => typeof x === 'string' && x) : [] });
       // 选集只影响对话目录；重算当前目录
-      await this.refreshModels();
+      await this.applySelection();
       return { state: 'updated' };
     },
     async setImageSelection(ids) {
       prefs.patch({ imageModelIds: Array.isArray(ids) ? ids.filter((x) => typeof x === 'string' && x) : [] });
-      await this.refreshModels();
+      await this.applySelection();
       return { state: 'updated' };
     },
     async setContextBudgets(map) {
@@ -282,7 +288,7 @@ export function createTraeProvider(region) {
         if (typeof value === 'number' && Number.isFinite(value) && value >= 1) clean[id] = Math.floor(value);
       }
       prefs.patch({ contextBudgets: clean });
-      await this.refreshModels();
+      await this.applySelection();
       return { state: 'updated' };
     },
     async logout() {
