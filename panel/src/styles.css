@@ -303,6 +303,11 @@ details.disclosure > summary .chev { transition: transform var(--speed); color: 
 details.disclosure[open] > summary .chev { transform: rotate(90deg); }
 details.disclosure .disclosure-body { padding: 4px 14px 12px; font-size: 14.5px; color: var(--text-2); display: grid; gap: 6px; }
 
+/* 作为页面一级块的折叠区（如推理探测）：左右内边距对齐 .section 的内容边，
+   与上下卡片的文字/操作形成同一条垂直视觉线；嵌在卡片内的保持紧凑内边距 */
+.content-inner > details.disclosure > summary { padding-left: 24px; padding-right: 24px; }
+.content-inner > details.disclosure .disclosure-body { padding-left: 24px; padding-right: 24px; }
+
 .mono-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; font: 13px var(--mono); color: var(--text-2); }
 .mono-list .reason { font: 13px var(--sans); color: var(--text-3); }
 
