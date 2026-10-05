@@ -32,7 +32,17 @@ const PROVIDERS = [
 
 const state = { providers: [], ready: false, errors: [] };
 
-const panelApi = createPanelApi({ providers: () => state.providers });
+/**
+ * 面板展示用的权威端点：以实际监听端口为准。面板可能经 Vite dev 服务器
+ * 代理打开，window.location.origin 不可信，端点只能由网关自己宣告。
+ */
+function gatewayEndpoint() {
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr?.port ? addr.port : PORT;
+  return `http://127.0.0.1:${port}/v1`;
+}
+
+const panelApi = createPanelApi({ providers: () => state.providers, endpoint: gatewayEndpoint });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const panelStatic = createStaticHandler({ distDir: path.join(__dirname, '..', 'panel', 'dist') });

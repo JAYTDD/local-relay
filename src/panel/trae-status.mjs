@@ -102,6 +102,25 @@ export function createTraeStatus({ providers }) {
       return [...REGIONS];
     },
 
+    /**
+     * 总览用的纯本地摘要：登录态走 store.status()（本地凭据扫描），不发上游请求；
+     * 区域启停由 healthDocument 的 enabled 字段表达，这里不重复。
+     */
+    async summary(region) {
+      const entry = providerFor(providers(), region);
+      if (!entry) return { status: 'signed-out', reason: `region not configured: ${region}` };
+      if (!entry.provider) return { status: 'failed', reason: entry.error ?? 'provider unavailable' };
+      let auth = { state: 'signed-out' };
+      try {
+        if (entry.provider.store) auth = (await entry.provider.store.status()) ?? auth;
+      } catch (e) {
+        return { status: 'failed', reason: String(e?.message ?? e) };
+      }
+      const out = { status: auth.state === 'signed-in' ? 'signed-in' : 'signed-out' };
+      if (out.status !== 'signed-in' && auth.reason !== undefined) out.reason = auth.reason;
+      return out;
+    },
+
     async document(region) {
       const entry = providerFor(providers(), region);
       if (!entry) return unconfiguredDocument(region);

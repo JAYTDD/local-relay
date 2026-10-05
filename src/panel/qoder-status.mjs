@@ -159,6 +159,29 @@ export function createQoderStatus({ providers }) {
     },
 
     /**
+     * 总览用的纯本地摘要：不发任何上游请求（额度/签到/目录刷新都不碰），
+     * 只读本地凭据状态与目录来源标记。字段刻意收窄：status/reason/degraded。
+     */
+    async summary(variant) {
+      const entry = providerFor(providers(), variant);
+      if (!entry) return { status: 'signed-out', reason: `variant not configured: ${variant}` };
+      if (!entry.provider) return { status: 'failed', reason: entry.error ?? 'provider unavailable' };
+      let auth = { state: 'signed-out' };
+      try {
+        auth = (await entry.provider.store?.status()) ?? auth;
+      } catch (e) {
+        return { status: 'failed', reason: String(e?.message ?? e) };
+      }
+      const out = { status: auth.state === 'configured' ? 'signed-in' : 'signed-out' };
+      if (out.status !== 'signed-in' && auth.reason !== undefined) out.reason = auth.reason;
+      if (entry.provider.catalogSource?.().source === 'fallback') {
+        out.degraded = true;
+        out.reason = out.reason ?? '目录为内置兜底（实时拉取未成功过）';
+      }
+      return out;
+    },
+
+    /**
      * 面板写操作（源 probe-route 的 action 面 + 签到调度设置）。
      * 未装配的能力明确失败，绝不静默成功。
      */

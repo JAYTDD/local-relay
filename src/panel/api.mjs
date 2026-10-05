@@ -27,16 +27,33 @@ async function readRequestBody(req, limit = 1024 * 1024) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** 通道健康度文档：不含任何凭据字段 */
-export function healthDocument(providers) {
+/** 读实时目录并回写 entry（与 server.mjs currentModels 同语义），失败返回 undefined */
+function liveModels(entry) {
+  try {
+    const live = entry.provider?.models?.();
+    if (live !== undefined) entry.models = live;
+    return live;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 通道健康度文档：不含任何凭据字段。
+ * - endpoint：网关的权威端点（面板可能被 Vite dev 服务器代理打开，
+ *   window.location 不可信，端点只能由网关自己宣告）。
+ * - models：实时目录计数，选集/禁用后总览与 /v1/models 永远一致。
+ */
+export function healthDocument(providers, endpoint) {
   return {
     ok: true,
     ready: true,
+    ...(endpoint === undefined ? {} : { endpoint }),
     providers: providers.map((p) => ({
       prefix: p.def.prefix,
       label: p.def.label,
       kind: p.def.kind,
-      models: p.models.length,
+      models: (liveModels(p) ?? p.models).length,
       // 通道被面板关闭（Trae 区域启停）时如实标注，前端据此显示状态点
       ...(p.provider?.enabled?.() === false ? { enabled: false } : {}),
       ...(p.error === undefined ? {} : { error: p.error }),
@@ -44,12 +61,37 @@ export function healthDocument(providers) {
   };
 }
 
+/** 前缀 → 摘要模块与变体的映射在 createPanelApi 内组装（依赖三个 status 实例） */
+
 export function createPanelApi(deps) {
   const routes = new Map();
   const traeStatus = createTraeStatus({ providers: deps.providers });
   const wbStatus = createWorkBuddyStatus({ providers: deps.providers });
   const qoderStatus = createQoderStatus({ providers: deps.providers });
-  routes.set('GET /panel/api/health', (req, res) => json(res, 200, healthDocument(deps.providers())));
+  // 总览实况：前缀 → [status 模块, 变体]。summary 只做本地读（不发上游请求）。
+  const SUMMARY_BY_PREFIX = {
+    trae: [traeStatus, 'cn'],
+    traeg: [traeStatus, 'ai'],
+    wb: [wbStatus, 'cn'],
+    wbai: [wbStatus, 'global'],
+    qoder: [qoderStatus, 'cn'],
+    qoderg: [qoderStatus, 'global'],
+  };
+  routes.set('GET /panel/api/health', async (req, res) => {
+    const doc = healthDocument(deps.providers(), deps.endpoint?.());
+    await Promise.all(doc.providers.map(async (p) => {
+      const pair = SUMMARY_BY_PREFIX[p.prefix];
+      if (!pair) return;
+      try {
+        const s = await pair[0].summary(pair[1]);
+        // 只挑已知字段：摘要模块多返什么都不漏进响应体
+        if (typeof s?.status === 'string') p.status = s.status;
+        if (typeof s?.reason === 'string') p.reason = s.reason;
+        if (s?.degraded === true) p.degraded = true;
+      } catch { /* 摘要失败不影响健康度主体，状态点退回 error/enabled 判定 */ }
+    }));
+    json(res, 200, doc);
+  });
   routes.set('GET /panel/api/trae', async (req, res) => {
     const out = {};
     for (const region of traeStatus.regions()) {

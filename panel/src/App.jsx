@@ -42,9 +42,9 @@ export default function App() {
     if (!item.prefixes || !health) return 'ok';
     const entries = health.providers.filter((p) => item.prefixes.includes(p.prefix));
     if (entries.length === 0) return 'ok';
-    if (entries.some((p) => p.error)) return 'err';
-    // 通道被面板关闭（如 Trae 区域启停）：能运行但不在服务，用黄色区分
-    if (entries.some((p) => p.enabled === false)) return 'warn';
+    // 红：启动失败或运行期摘要判失败；黄：通道停用、未登录/未配置、目录降级
+    if (entries.some((p) => p.error || p.status === 'failed')) return 'err';
+    if (entries.some((p) => p.enabled === false || p.status === 'signed-out' || p.degraded)) return 'warn';
     return 'ok';
   };
 
@@ -81,7 +81,8 @@ export default function App() {
         })}
         <div className="sidebar-foot">
           <span className="k">网关端点</span>
-          <span className="v">{window.location.host}/v1</span>
+          {/* 后端宣告的权威端点；旧后端无该字段时回落当前 origin */}
+          <span className="v">{health?.endpoint ?? `${window.location.host}/v1`}</span>
           <span className="k" style={{ marginTop: 4 }}>协议</span>
           <span className="v">OpenAI 兼容</span>
         </div>

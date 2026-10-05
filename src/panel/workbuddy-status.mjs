@@ -46,6 +46,25 @@ export function createWorkBuddyStatus({ providers }) {
       return Object.keys(VARIANTS);
     },
 
+    /**
+     * 总览用的纯本地摘要：与 document 同一套登录态基准（全量目录非空即视为
+     * 可用——把模型全部隐藏不该被误报成"未登录"），不碰额度、不刷新目录。
+     */
+    async summary(variant) {
+      const entry = providerFor(providers(), variant);
+      if (!entry) return { status: 'signed-out', reason: `variant not configured: ${variant}` };
+      if (!entry.provider) return { status: 'failed', reason: entry.error ?? 'provider unavailable' };
+      const live = entry.provider;
+      const models = live.displayModels?.() ?? live.models?.() ?? entry.models ?? [];
+      const out = { status: models.length > 0 ? 'signed-in' : 'signed-out' };
+      if (out.status === 'signed-out') out.reason = 'no models discovered';
+      if (live.catalogSource?.().source === 'fallback') {
+        out.degraded = true;
+        out.reason = out.reason ?? '目录为内置兜底（实时拉取未成功过）';
+      }
+      return out;
+    },
+
     async document(variant) {
       const entry = providerFor(providers(), variant);
       if (!entry) {
