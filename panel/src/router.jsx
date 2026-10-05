@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
  * 不引 react-router——本项目前端依赖刻意只有 react/react-dom（面板由网关
  * 同源托管，hash 路由不依赖服务端 fallback，最稳）。够用即可。
  */
-export const ROUTES = ['overview', 'trae', 'workbuddy', 'qoder'];
+export const ROUTES = ['overview', 'trae', 'workbuddy', 'qoder', 'logs'];
 
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '');
