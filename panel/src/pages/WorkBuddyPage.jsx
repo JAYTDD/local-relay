@@ -151,8 +151,6 @@ export default function WorkBuddyPage({ variant, onVariant }) {
             />
           </Section>
 
-          <ProbeSection probe={doc.probe} busy={busy} onProbe={probe} />
-
           <ProbeSection
             probe={doc.probe}
             busy={busy}
