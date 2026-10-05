@@ -14,6 +14,7 @@
  * 注意：早期版本一律返回 signed-out，导致已登录的 Trae CN 被误报为"未登录"。
  * 面板必须反映真实状态，不能凭"依赖不全"就声称未登录。
  */
+import { withDeadline } from './live-deadline.mjs';
 
 const REGIONS = ['cn', 'ai'];
 
@@ -174,7 +175,8 @@ export function createTraeStatus({ providers }) {
       const selected = accounts.find((a) => a.selected) ?? accounts[0];
 
       // 额度/签到：CN 与 AI 是两条不同的上游契约（源实现只在 ai 走 payStatus）。
-      // 任何异常降级成 *Error 字段，绝不让整个文档 500。
+      // 任何异常降级成 *Error 字段，绝不让整个文档 500；真上游读走面板的等待预算
+      // （上游卡住时只丢这一段，模型与设置照常出）。
       let usageFields = {};
       const usage = liveProvider.usage;
       if (!signedIn) {
@@ -183,14 +185,14 @@ export function createTraeStatus({ providers }) {
         usageFields = { usageUnavailable: 'usage client not wired' };
       } else if (region === 'ai') {
         try {
-          usageFields = { payStatus: await usage.payStatus() };
+          usageFields = { payStatus: await withDeadline(usage.payStatus(), 'Trae 订阅状态') };
         } catch (e) {
           usageFields = { payStatusError: String(e?.message ?? e) };
         }
       } else {
         const [snapshotResult, checkinResult] = await Promise.allSettled([
-          usage.snapshot(),
-          usage.checkinStatus(),
+          withDeadline(usage.snapshot(), 'Trae 额度'),
+          withDeadline(usage.checkinStatus(), 'Trae 签到状态'),
         ]);
         usageFields = {
           ...(snapshotResult.status === 'fulfilled'

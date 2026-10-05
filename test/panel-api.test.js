@@ -129,3 +129,71 @@ test('GET /panel/api/qoder lists both variants', async () => {
   assert.deepEqual(Object.keys(body.variants).sort(), ['cn', 'global']);
   assert.equal(body.variants.cn.status, 'signed-out');
 });
+
+/** 造一个可计数的 WorkBuddy 变体，用于验证"只算被请求的那一个" */
+function wbEntry(prefix, modelId, { calls, boom = false }) {
+  return {
+    def: { prefix, label: prefix, kind: 'workbuddy' },
+    models: [],
+    provider: {
+      displayModels: () => {
+        calls.push(prefix);
+        if (boom) throw new Error(`${prefix} 目录炸了`);
+        return [{ id: modelId }];
+      },
+      models: () => [{ id: modelId }],
+      catalogSource: () => ({ source: 'live' }),
+    },
+    error: undefined,
+  };
+}
+
+test('GET /panel/api/workbuddy?variant= 只算被请求的变体（另一份不碰上游）', async () => {
+  const calls = [];
+  const providers = () => [wbEntry('wb', 'cn-model', { calls }), wbEntry('wbai', 'global-model', { calls })];
+  const api = createPanelApi({ providers });
+  const res = makeRes();
+  await api.handle({ method: 'GET', url: '/panel/api/workbuddy?variant=cn', headers: {} }, res, '/panel/api/workbuddy');
+  const body = JSON.parse(res.body);
+  assert.deepEqual(Object.keys(body.variants), ['cn'], '响应里只该有被请求的变体');
+  assert.equal(body.variants.cn.models[0].id, 'cn-model');
+  assert.deepEqual(calls, ['wb'], '未被请求的变体根本不该被计算');
+});
+
+test('GET /panel/api/workbuddy 不带 variant 时两个变体都算', async () => {
+  const calls = [];
+  const providers = () => [wbEntry('wb', 'cn-model', { calls }), wbEntry('wbai', 'global-model', { calls })];
+  const api = createPanelApi({ providers });
+  const res = makeRes();
+  await api.handle({ method: 'GET', url: '/panel/api/workbuddy', headers: {} }, res, '/panel/api/workbuddy');
+  assert.deepEqual(Object.keys(JSON.parse(res.body).variants).sort(), ['cn', 'global']);
+  assert.deepEqual(calls.sort(), ['wb', 'wbai']);
+});
+
+test('GET /panel/api/workbuddy?variant=未知 → 404，不静默回落', async () => {
+  const api = createPanelApi({ providers: fakeProviders });
+  const res = makeRes();
+  await api.handle({ method: 'GET', url: '/panel/api/workbuddy?variant=nope', headers: {} }, res, '/panel/api/workbuddy');
+  assert.equal(res.statusCode, 404);
+});
+
+test('一个变体算失败不牵连同一次请求里的另一个', async () => {
+  const calls = [];
+  const providers = () => [wbEntry('wb', 'cn-model', { calls }), wbEntry('wbai', 'x', { calls, boom: true })];
+  const api = createPanelApi({ providers });
+  const res = makeRes();
+  await api.handle({ method: 'GET', url: '/panel/api/workbuddy', headers: {} }, res, '/panel/api/workbuddy');
+  assert.equal(res.statusCode, 200, '单个变体失败不该让整次请求 500');
+  const body = JSON.parse(res.body);
+  assert.equal(body.variants.cn.status, 'signed-in');
+  assert.equal(body.variants.global.status, 'failed');
+  assert.match(body.variants.global.reason, /炸了/);
+});
+
+test('GET /panel/api/trae?region= 只算被请求的区服', async () => {
+  const api = createPanelApi({ providers: fakeProviders });
+  const res = makeRes();
+  await api.handle({ method: 'GET', url: '/panel/api/trae?region=ai', headers: {} }, res, '/panel/api/trae');
+  const body = JSON.parse(res.body);
+  assert.deepEqual(Object.keys(body.regions), ['ai']);
+});

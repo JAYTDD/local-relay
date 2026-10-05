@@ -11,6 +11,7 @@
  *     绝不静默成功——静默成功正是 proxy-hub 踩过的坑）。
  */
 import { normalizeCredits, modelWithCurrentPromotion } from 'dsh-workbuddy-connect';
+import { withDeadline } from './live-deadline.mjs';
 
 const VARIANTS = { cn: 'wb', global: 'wbai' };
 
@@ -103,11 +104,12 @@ export function createWorkBuddyStatus({ providers }) {
       // 额度（源 workBuddyWebStatus 的 credits 段）：读不到就记 creditsError，
       // 模型列表照常可用；无凭据时安静跳过（不报错，也不编造）。
       // fetchCredits 返回 { total, accounts:[{packageName,remain,size}] }，本身不含凭据材料。
+      // 真上游请求，走面板的等待预算：上游卡住时不让整页文档跟着卡（见 live-deadline）。
       let creditsField = {};
       try {
         const credential = await liveProvider.store?.current();
         if (credential !== undefined && liveProvider.client?.fetchCredits) {
-          creditsField = { credits: await liveProvider.client.fetchCredits(credential) };
+          creditsField = { credits: await withDeadline(liveProvider.client.fetchCredits(credential), 'WorkBuddy 额度') };
         }
       } catch (e) {
         creditsField = { creditsError: String(e?.message ?? e) };

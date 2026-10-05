@@ -12,6 +12,7 @@
  * 详见 src/providers/qoder.mjs 顶部说明。
  */
 import { normalizeCredits } from 'dsh-qoder-connect';
+import { withDeadline } from './live-deadline.mjs';
 
 const VARIANTS = { cn: 'qoder', global: 'qoderg' };
 
@@ -96,10 +97,13 @@ export function createQoderStatus({ providers }) {
         catalogField = { catalog: { ...(live.catalogSource() ?? {}) } };
       }
 
-      // 额度（fetchCredits 无参）
+      // 额度（fetchCredits 无参）。真上游请求（内部 force 刷账号缓存），
+      // 走面板的等待预算：上游卡住时只丢这一段，模型与设置照常出。
       let creditsField = {};
       try {
-        if (live.client?.fetchCredits) creditsField = { credits: await live.client.fetchCredits() };
+        if (live.client?.fetchCredits) {
+          creditsField = { credits: await withDeadline(live.client.fetchCredits(), 'Qoder 额度') };
+        }
       } catch (e) {
         creditsField = { creditsError: String(e?.message ?? e) };
       }

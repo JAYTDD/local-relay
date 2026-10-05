@@ -64,6 +64,34 @@ export function healthDocument(providers, endpoint) {
 
 /** 前缀 → 摘要模块与变体的映射在 createPanelApi 内组装（依赖三个 status 实例） */
 
+/**
+ * 通道文档路由（Trae 的区服 / WorkBuddy、Qoder 的变体共用）。
+ *
+ * 关键点：**只算被请求的那一个**。文档里的额度段是真上游请求，两个变体串行
+ * 计算意味着等两份上游返回，而页面只显示一份——耗时白白翻倍。带 ?param=key
+ * 时只算这一个；不带时两个并发（并发而非串行：总耗时取最大值，不取和）。
+ *
+ * 单个变体的失败不牵连同一次请求里的另一个：这里把异常折成 failed 文档，
+ * 与三个 status 模块"接口永不 500"的约定一致。
+ */
+async function documentRoute(req, res, { keys, document, param, field }) {
+  const url = new URL(req.url, 'http://127.0.0.1');
+  const only = url.searchParams.get(param);
+  const wanted = only === null ? keys : keys.filter((k) => k === only);
+  if (wanted.length === 0) {
+    return json(res, 404, { error: { message: `unknown ${param}: ${only}` } });
+  }
+  const out = {};
+  await Promise.all(wanted.map(async (key) => {
+    try {
+      out[key] = await document(key);
+    } catch (e) {
+      out[key] = { status: 'failed', reason: String(e?.message ?? e), models: [] };
+    }
+  }));
+  json(res, 200, { [field]: out });
+}
+
 export function createPanelApi(deps) {
   const routes = new Map();
   const traeStatus = createTraeStatus({ providers: deps.providers });
@@ -94,13 +122,9 @@ export function createPanelApi(deps) {
     }));
     json(res, 200, doc);
   });
-  routes.set('GET /panel/api/trae', async (req, res) => {
-    const out = {};
-    for (const region of traeStatus.regions()) {
-      out[region] = await traeStatus.document(region);
-    }
-    json(res, 200, { regions: out });
-  });
+  routes.set('GET /panel/api/trae', (req, res) => documentRoute(req, res, {
+    keys: traeStatus.regions(), document: (region) => traeStatus.document(region), param: 'region', field: 'regions',
+  }));
   routes.set('POST /panel/api/trae/refresh', async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const region = url.searchParams.get('region') ?? 'cn';
@@ -124,13 +148,9 @@ export function createPanelApi(deps) {
     }
     json(res, 200, await traeStatus.control(region, body));
   });
-  routes.set('GET /panel/api/workbuddy', async (req, res) => {
-    const out = {};
-    for (const variant of wbStatus.variants()) {
-      out[variant] = await wbStatus.document(variant);
-    }
-    json(res, 200, { variants: out });
-  });
+  routes.set('GET /panel/api/workbuddy', (req, res) => documentRoute(req, res, {
+    keys: wbStatus.variants(), document: (v) => wbStatus.document(v), param: 'variant', field: 'variants',
+  }));
   routes.set('POST /panel/api/workbuddy/control', async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const variant = url.searchParams.get('variant') ?? 'cn';
@@ -155,13 +175,9 @@ export function createPanelApi(deps) {
     }
     json(res, 200, await wbStatus.probe(variant, body.model));
   });
-  routes.set('GET /panel/api/qoder', async (req, res) => {
-    const out = {};
-    for (const variant of qoderStatus.variants()) {
-      out[variant] = await qoderStatus.document(variant);
-    }
-    json(res, 200, { variants: out });
-  });
+  routes.set('GET /panel/api/qoder', (req, res) => documentRoute(req, res, {
+    keys: qoderStatus.variants(), document: (v) => qoderStatus.document(v), param: 'variant', field: 'variants',
+  }));
   routes.set('POST /panel/api/qoder/control', async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const variant = url.searchParams.get('variant') ?? 'cn';
