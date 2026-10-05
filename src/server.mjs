@@ -270,6 +270,10 @@ async function handleChat(req, res) {
   }
   const { provider, upstreamModel } = hit;
   const wantStream = body.stream === true;
+  // 客户端断开（取消生成/关页面）就中止上游，别让订阅额度白烧。
+  // res 'close' 在正常完成后也会触发，那时 abort 是无害的 no-op。
+  const abort = new AbortController();
+  res.on('close', () => abort.abort());
   // WorkBuddy 上游会整单拦截 system 里的 Claude Code 计费头块（wb/wbai 都拦）
   // 和旧版身份签名句（仅 wbai，VS Code 扩展每个请求都带）。出站前做最小修整，
   // 不含这些内容的请求逐字节原样；trae/qoder 不经过这段。
@@ -290,8 +294,10 @@ async function handleChat(req, res) {
         Accept: 'text/event-stream',
       },
       body: JSON.stringify(upstreamBody),
+      signal: abort.signal,
     });
   } catch (e) {
+    if (abort.signal.aborted) return; // 客户端已断开，写错误没有意义
     return json(res, 502, { error: { message: `Upstream failed: ${e.message}` } });
   }
 
@@ -315,6 +321,7 @@ async function handleChat(req, res) {
     const result = await collectStream(r, upstreamModel);
     return json(res, 200, result);
   } catch (e) {
+    if (abort.signal.aborted) return; // 客户端已断开
     return json(res, 502, { error: { message: `Upstream failed: ${e.message}` } });
   }
 }
