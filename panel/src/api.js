@@ -19,6 +19,7 @@ async function req(method, url, body) {
 
 export const api = {
   getHealth: () => req('GET', '/panel/api/health'),
+  getLogs: () => req('GET', '/panel/api/logs'),
   getTrae: () => req('GET', '/panel/api/trae'),
   getWorkBuddy: () => req('GET', '/panel/api/workbuddy'),
   getQoder: () => req('GET', '/panel/api/qoder'),

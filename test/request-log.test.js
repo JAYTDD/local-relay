@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { logRequest, snapshotLogs, resetLogs } from '../src/request-log.mjs';
+
+// 环形容量在模块加载时读 env，必须先设 env 再动态 import
+process.env.RELAY_LOG_CAP = '3';
+const { logRequest, snapshotLogs, resetLogs } = await import('../src/request-log.mjs');
 
 test('快照 newest-first，且不持有可变引用', () => {
   resetLogs();

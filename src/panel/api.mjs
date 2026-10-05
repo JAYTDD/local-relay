@@ -5,6 +5,7 @@
 import { createTraeStatus } from './trae-status.mjs';
 import { createWorkBuddyStatus } from './workbuddy-status.mjs';
 import { createQoderStatus } from './qoder-status.mjs';
+import { snapshotLogs } from '../request-log.mjs';
 
 /** 安全 JSON 响应 */
 function json(res, status, body) {
@@ -77,6 +78,7 @@ export function createPanelApi(deps) {
     qoder: [qoderStatus, 'cn'],
     qoderg: [qoderStatus, 'global'],
   };
+  routes.set('GET /panel/api/logs', (req, res) => json(res, 200, snapshotLogs()));
   routes.set('GET /panel/api/health', async (req, res) => {
     const doc = healthDocument(deps.providers(), deps.endpoint?.());
     await Promise.all(doc.providers.map(async (p) => {

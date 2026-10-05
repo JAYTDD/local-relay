@@ -15,6 +15,7 @@ import { createPanelApi } from './panel/api.mjs';
 import { createStaticHandler } from './panel/static.mjs';
 import { resolveModel } from './model-routing.mjs';
 import { rewriteClaudeCodeSignature, stripBillingHeader } from './workbuddy-compat.mjs';
+import { logRequest } from './request-log.mjs';
 
 const PORT = Number(process.env.RELAY_PORT ?? 8790);
 const ACCESS_KEY = process.env.RELAY_KEY ?? '';
@@ -260,8 +261,14 @@ async function handleChat(req, res) {
   }
   const modelId = body.model;
   for (const p of state.providers) currentModels(p);
+  const startedAt = Date.now();
   const hit = resolveModel(state.providers.filter(serving), modelId);
   if (!hit) {
+    // 解析失败是最高频的用户错误（显示名当 ID、大小写错、目录未刷新），必须留痕
+    logRequest({
+      channel: null, model: modelId, upstreamModel: null, stream: body.stream === true,
+      status: 'unknown-model', durationMs: Date.now() - startedAt,
+    });
     return json(res, 404, {
       error: {
         message: `Unknown model: ${modelId}. Take the id from GET /v1/models — ids are case-sensitive and the display name is not the id. If the model is new upstream, refresh its channel in the panel first.`,
@@ -297,12 +304,23 @@ async function handleChat(req, res) {
       signal: abort.signal,
     });
   } catch (e) {
+    logRequest({
+      channel: provider.def.prefix, model: modelId, upstreamModel, stream: wantStream,
+      status: abort.signal.aborted ? 'aborted' : 'error',
+      durationMs: Date.now() - startedAt,
+      ...(abort.signal.aborted ? {} : { error: String(e.message ?? e).slice(0, 200) }),
+    });
     if (abort.signal.aborted) return; // 客户端已断开，写错误没有意义
     return json(res, 502, { error: { message: `Upstream failed: ${e.message}` } });
   }
 
   if (!r.ok) {
     const text = await r.text().catch(() => '');
+    logRequest({
+      channel: provider.def.prefix, model: modelId, upstreamModel, stream: wantStream,
+      status: 'error', httpStatus: r.status, durationMs: Date.now() - startedAt,
+      error: text.slice(0, 200),
+    });
     return json(res, r.status, { error: { message: `Upstream failed: ${text.slice(0, 400)}` } });
   }
 
@@ -314,13 +332,26 @@ async function handleChat(req, res) {
     });
     if (!r.body) return res.end();
     await relayStream(r.body, res);
+    logRequest({
+      channel: provider.def.prefix, model: modelId, upstreamModel, stream: true,
+      status: abort.signal.aborted ? 'aborted' : 'ok', durationMs: Date.now() - startedAt,
+    });
     return res.end();
   }
 
   try {
     const result = await collectStream(r, upstreamModel);
+    logRequest({
+      channel: provider.def.prefix, model: modelId, upstreamModel, stream: false,
+      status: 'ok', durationMs: Date.now() - startedAt,
+    });
     return json(res, 200, result);
   } catch (e) {
+    logRequest({
+      channel: provider.def.prefix, model: modelId, upstreamModel, stream: false,
+      status: abort.signal.aborted ? 'aborted' : 'error', durationMs: Date.now() - startedAt,
+      ...(abort.signal.aborted ? {} : { error: String(e.message ?? e).slice(0, 200) }),
+    });
     if (abort.signal.aborted) return; // 客户端已断开
     return json(res, 502, { error: { message: `Upstream failed: ${e.message}` } });
   }

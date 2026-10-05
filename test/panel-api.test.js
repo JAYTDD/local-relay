@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPanelApi } from '../src/panel/api.mjs';
+import { logRequest, resetLogs } from '../src/request-log.mjs';
 
 /** 造一个假的 providers 快照 */
 function fakeProviders() {
@@ -101,6 +102,20 @@ test('unknown panel path is not handled', async () => {
   const res = makeRes();
   const handled = await api.handle({ method: 'GET', url: '/panel/api/nope', headers: {} }, res, '/panel/api/nope');
   assert.equal(handled, false);
+});
+
+test('GET /panel/api/logs 返回请求日志快照（newest-first，无正文）', async () => {
+  resetLogs();
+  logRequest({ channel: 'qoder', model: 'qoder/qfmodel', upstreamModel: 'qfmodel', stream: true, status: 'ok', durationMs: 12 });
+  const api = createPanelApi({ providers: fakeProviders });
+  const res = makeRes();
+  const handled = await api.handle({ method: 'GET', url: '/panel/api/logs', headers: {} }, res, '/panel/api/logs');
+  assert.equal(handled, true);
+  const body = JSON.parse(res.body);
+  assert.equal(body.entries.length, 1);
+  assert.equal(body.entries[0].model, 'qoder/qfmodel');
+  assert.equal(body.entries[0].status, 'ok');
+  resetLogs();
 });
 
 test('GET /panel/api/qoder lists both variants', async () => {
