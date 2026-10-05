@@ -61,7 +61,7 @@ export default function LogsPage() {
             </thead>
             <tbody>
               {entries.map((e, i) => (
-                <tr key={`${e.at}-${i}`} style={e.status !== 'ok' ? { color: 'var(--err, #f87171)' } : undefined}>
+                <tr key={`${e.at}-${i}`} className={e.status !== 'ok' ? 'row-err' : undefined}>
                   <td>{fmtTime(e.at)}</td>
                   <td>{e.channel ? <code className="inline">{e.channel}/</code> : <span className="dim">—</span>}</td>
                   <td><code className="inline">{e.model}</code></td>

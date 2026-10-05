@@ -39,12 +39,12 @@ export default function OverviewPage({ health, navigate }) {
       </header>
 
       <section className="section">
-        <div className="endpoint">
+        <div className="endpoint" title="OpenAI 兼容接口；未设置 RELAY_KEY 时 API Key 可任意填写">
           <PlugMark />
           <span className="url">{endpoint}</span>
           <CopyButton className="btn sm" value={endpoint} title="复制端点">复制</CopyButton>
           <span className="meta">
-            OpenAI 兼容 · Chat Completions · 模型名格式 <code className="inline">前缀/模型ID</code> · 未设 RELAY_KEY 时 API Key 任意
+            OpenAI 兼容 · Chat Completions · 模型名 <code className="inline">前缀/模型ID</code>
           </span>
         </div>
       </section>
