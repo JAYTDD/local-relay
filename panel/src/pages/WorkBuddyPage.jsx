@@ -16,7 +16,7 @@ const REGIONS = [
 const CATALOG_LABEL = { live: '实时拉取', saved: '上次保存的目录', fallback: '内置兜底名册' };
 
 /** WorkBuddy 通道页：额度、模型启停、推理探测 */
-export default function WorkBuddyPage({ variant, onVariant }) {
+export default function WorkBuddyPage({ variant, onVariant, onChannelChanged }) {
   const { data, loading, error, reload } = useAsyncData(api.getWorkBuddy);
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState(null);
@@ -34,6 +34,7 @@ export default function WorkBuddyPage({ variant, onVariant }) {
         ? { kind: 'ok', text: okText ?? `${label}成功` }
         : { kind: 'err', text: `${label}失败：${out?.reason ?? out?.state ?? '未知原因'}` });
       await reload();
+      onChannelChanged?.();
     } catch (e) {
       setNotice({ kind: 'err', text: `${label}失败：${e.message ?? e}` });
     } finally {
@@ -82,6 +83,7 @@ export default function WorkBuddyPage({ variant, onVariant }) {
         ? { kind: 'ok', text: okText }
         : { kind: 'err', text: `设置失败：${out?.reason ?? out?.state}` });
       await reload();
+      onChannelChanged?.();
     } catch (e) {
       setNotice({ kind: 'err', text: `设置失败：${e.message ?? e}` });
     } finally {

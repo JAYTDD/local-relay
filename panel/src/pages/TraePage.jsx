@@ -13,7 +13,7 @@ const REGIONS = [
 ];
 
 /** Trae 通道页：登录态、账号切换、额度、签到、选集/预算、Raw Chat 诊断 */
-export default function TraePage({ region, onRegion }) {
+export default function TraePage({ region, onRegion, onChannelChanged }) {
   const { data, loading, error, reload } = useAsyncData(api.getTrae);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null); // {kind, text}
@@ -30,6 +30,7 @@ export default function TraePage({ region, onRegion }) {
         ? { kind: 'ok', text: okText ?? '已保存' }
         : { kind: 'err', text: `操作失败：${out?.reason ?? out?.state ?? '未知原因'}` });
       await reload();
+      onChannelChanged?.();
       return out;
     } catch (e) {
       setNotice({ kind: 'err', text: `操作失败：${e.message ?? e}` });
@@ -49,6 +50,7 @@ export default function TraePage({ region, onRegion }) {
         ? { kind: 'err', text: `目录已更新，但有告警：${errs.join('；')}` }
         : { kind: 'ok', text: `目录已更新（${(out?.models ?? []).length} 个模型）` });
       await reload();
+      onChannelChanged?.();
     } catch (e) {
       setNotice({ kind: 'err', text: `刷新失败：${e.message ?? e}` });
     } finally {
@@ -64,6 +66,7 @@ export default function TraePage({ region, onRegion }) {
         ? { kind: 'ok', text: `签到成功${typeof out.message === 'string' && out.message ? `：${out.message}` : ''}` }
         : { kind: 'info', text: `未领取：${out?.reason ?? '今日已签或活动未开启'}` });
       await reload();
+      onChannelChanged?.();
     } catch (e) {
       setNotice({ kind: 'err', text: `签到失败：${e.message ?? e}` });
     } finally {

@@ -48,8 +48,6 @@ export default function App() {
     return 'ok';
   };
 
-  const pageProps = { navigate, onChannelChanged };
-
   return (
     <div className="app">
       <nav className="sidebar">
@@ -95,18 +93,21 @@ export default function App() {
           <TraePage
             region={query.r === 'ai' ? 'ai' : 'cn'}
             onRegion={(r) => { replaceQuery({ r }); onChannelChanged(); }}
+            onChannelChanged={onChannelChanged}
           />
         )}
         {route === 'workbuddy' && (
           <WorkBuddyPage
             variant={query.r === 'global' ? 'global' : 'cn'}
             onVariant={(r) => { replaceQuery({ r }); onChannelChanged(); }}
+            onChannelChanged={onChannelChanged}
           />
         )}
         {route === 'qoder' && (
           <QoderPage
             variant={query.r === 'global' ? 'global' : 'cn'}
             onVariant={(r) => { replaceQuery({ r }); onChannelChanged(); }}
+            onChannelChanged={onChannelChanged}
           />
         )}
       </main>

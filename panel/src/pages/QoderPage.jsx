@@ -46,7 +46,7 @@ function qoderCtx(m) {
 }
 
 /** Qoder 通道页：额度、签到状态、推理探测、模型目录 */
-export default function QoderPage({ variant, onVariant }) {
+export default function QoderPage({ variant, onVariant, onChannelChanged }) {
   const { data, loading, error, reload } = useAsyncData(api.getQoder);
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState(null);
@@ -63,6 +63,7 @@ export default function QoderPage({ variant, onVariant }) {
         ? { kind: 'ok', text: `目录已更新（${(out?.models ?? []).length} 个模型）` }
         : { kind: 'err', text: `刷新失败：${out?.reason ?? out?.state}` });
       await reload();
+      onChannelChanged?.();
     } catch (e) {
       setNotice({ kind: 'err', text: `刷新失败：${e.message ?? e}` });
     } finally {
@@ -96,6 +97,7 @@ export default function QoderPage({ variant, onVariant }) {
         ? { kind: 'ok', text: okText ?? out?.reason ?? '已保存' }
         : { kind: 'err', text: `操作失败：${out?.reason ?? out?.state ?? '未知原因'}` });
       await reload();
+      onChannelChanged?.();
       return out;
     } catch (e) {
       setNotice({ kind: 'err', text: `操作失败：${e.message ?? e}` });
@@ -116,6 +118,7 @@ export default function QoderPage({ variant, onVariant }) {
       else if (out?.state === 'no-campaign') setNotice({ kind: 'info', text: '今日没有可领取的签到活动' });
       else setNotice({ kind: 'err', text: `签到失败：${out?.reason ?? out?.state ?? '未知原因'}` });
       await reload();
+      onChannelChanged?.();
     } catch (e) {
       setNotice({ kind: 'err', text: `签到失败：${e.message ?? e}` });
     } finally {
