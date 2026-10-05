@@ -161,13 +161,12 @@ local-relay/
 │       ├── trae.mjs            # Trae 栈装配（两个区域）
 │       └── workbuddy.mjs       # WorkBuddy 栈装配（国内 / 国际）
 ├── shims/                      # 从 DSH 插件提取的协议层（含 DSH 依赖桩）
-│   ├── node_modules/
-│   │   ├── @deepseek-ai/       # 5 个桩包
-│   │   ├── @earendil-works/
-│   │   ├── dsh-connect-trae/
-│   │   ├── dsh-workbuddy-connect/
-│   │   └── dsh-qoder-connect/
-│   └── probe-*.mjs             # 可行性验证脚本
+│   └── node_modules/
+│       ├── @deepseek-ai/       # 5 个桩包
+│       ├── @earendil-works/
+│       ├── dsh-connect-trae/
+│       ├── dsh-workbuddy-connect/
+│       └── dsh-qoder-connect/
 └── node_modules/               # 复制自 shims/node_modules
 ```
 
