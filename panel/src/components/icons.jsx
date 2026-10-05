@@ -46,9 +46,6 @@ export const ChevronRightIcon = (p) => <Icon {...p}><path d="M9 18l6-6-6-6" /></
 export const AlertIcon = (p) => (
   <Icon {...p}><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></Icon>
 );
-export const CoinsIcon = (p) => (
-  <Icon {...p}><circle cx="8" cy="8" r="6" /><path d="M18.1 10.6a6 6 0 1 1-7.5 7.5" /></Icon>
-);
 export const CalendarCheckIcon = (p) => (
   <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /><path d="M9 15l2 2 4-4" /></Icon>
 );
@@ -57,9 +54,6 @@ export const SparklesIcon = (p) => (
 );
 export const GlobeIcon = (p) => (
   <Icon {...p}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14.5 14.5 0 0 1 0 18a14.5 14.5 0 0 1 0-18z" /></Icon>
-);
-export const PlugIcon = (p) => (
-  <Icon {...p}><path d="M9 2v6M15 2v6" /><path d="M6 8h12v4a6 6 0 0 1-12 0V8z" /><path d="M12 18v4" /></Icon>
 );
 export const InboxIcon = (p) => (
   <Icon {...p}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z" /></Icon>

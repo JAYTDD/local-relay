@@ -14,3 +14,6 @@
 /.dsh-acl-report/
 /.probe.mjs
 /probe-*.mjs
+
+# 工具自留地：ZCode 的会话/计划缓存，不是项目内容
+/.zcode/

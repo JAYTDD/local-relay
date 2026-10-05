@@ -395,7 +395,6 @@ code.inline { font: 13px var(--mono); background: var(--panel-3); border: 1px so
 /* 细节小字 */
 .dim { color: var(--text-3); }
 .small { font-size: 14px; }
-.mt { margin-top: 14px; }
 
 /* 减少动态偏好 */
 @media (prefers-reduced-motion: reduce) {
