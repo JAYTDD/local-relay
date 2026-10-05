@@ -14,6 +14,7 @@ import { createQoderProvider } from './providers/qoder.mjs';
 import { createPanelApi } from './panel/api.mjs';
 import { createStaticHandler } from './panel/static.mjs';
 import { resolveModel } from './model-routing.mjs';
+import { rewriteClaudeCodeSignature, stripBillingHeader } from './workbuddy-compat.mjs';
 
 const PORT = Number(process.env.RELAY_PORT ?? 8790);
 const ACCESS_KEY = process.env.RELAY_KEY ?? '';
@@ -259,7 +260,15 @@ async function handleChat(req, res) {
   }
   const { provider, upstreamModel } = hit;
   const wantStream = body.stream === true;
-  const upstreamBody = { ...body, model: upstreamModel, stream: true };
+  // WorkBuddy 上游会整单拦截 system 里的 Claude Code 计费头块（wb/wbai 都拦）
+  // 和旧版身份签名句（仅 wbai，VS Code 扩展每个请求都带）。出站前做最小修整，
+  // 不含这些内容的请求逐字节原样；trae/qoder 不经过这段。
+  let outbound = body;
+  if (hit.provider.def.kind === 'workbuddy') {
+    outbound = stripBillingHeader(outbound);
+    if (hit.provider.def.prefix === 'wbai') outbound = rewriteClaudeCodeSignature(outbound);
+  }
+  const upstreamBody = { ...outbound, model: upstreamModel, stream: true };
 
   let r;
   try {
