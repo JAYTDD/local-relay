@@ -257,6 +257,8 @@ export function createTraeProvider(region) {
     async selectAccount(accountId) {
       prefs.patch({ selectedAccountId: accountId });
       store.selectAccount(accountId);
+      // 账号变了目录/倍率就是旧账号的——独立网关没有 sweep 兜底，必须立刻重拉
+      await this.refreshModels();
       return { state: 'updated' };
     },
     async setEnabled(value) {
