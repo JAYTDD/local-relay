@@ -47,7 +47,10 @@ function qoderCtx(m) {
 
 /** Qoder 通道页：额度、签到状态、推理探测、模型目录 */
 export default function QoderPage({ variant, onVariant, onChannelChanged }) {
-  const { data, loading, error, reload } = useAsyncData(api.getQoder);
+  const { data, loading, error, reload } = useAsyncData(
+    (signal) => api.getQoder(variant, signal),
+    { cacheKey: `qoder:${variant}` },
+  );
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState(null);
 

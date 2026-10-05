@@ -13,7 +13,7 @@ const STATUS_LABEL = {
 
 /** 请求日志：环形缓冲的元数据（不含正文），排障用。挂载期间每 5s 轮询。 */
 export default function LogsPage() {
-  const { data, loading, error, reload } = useAsyncData(api.getLogs);
+  const { data, loading, error, reload } = useAsyncData((signal) => api.getLogs(signal), { cacheKey: 'logs' });
 
   useEffect(() => {
     const t = setInterval(() => { reload(); }, 5_000);

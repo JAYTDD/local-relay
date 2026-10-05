@@ -1,10 +1,11 @@
 /** 面板 API 客户端。所有路径相对当前 origin，由 local-relay 同源托管。 */
 
-async function req(method, url, body) {
+async function req(method, url, body, signal) {
   const res = await fetch(url, {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
   const text = await res.text();
   let json;
@@ -17,12 +18,18 @@ async function req(method, url, body) {
   return json;
 }
 
+/**
+ * 通道文档只取当前区服/变体（?region= / ?variant=）：文档里的额度段是真上游
+ * 请求，两个都取等于白等一份——页面只显示一份。
+ */
 export const api = {
-  getHealth: () => req('GET', '/panel/api/health'),
-  getLogs: () => req('GET', '/panel/api/logs'),
-  getTrae: () => req('GET', '/panel/api/trae'),
-  getWorkBuddy: () => req('GET', '/panel/api/workbuddy'),
-  getQoder: () => req('GET', '/panel/api/qoder'),
+  getHealth: (signal) => req('GET', '/panel/api/health', undefined, signal),
+  getLogs: (signal) => req('GET', '/panel/api/logs', undefined, signal),
+  getTrae: (region, signal) => req('GET', `/panel/api/trae?region=${encodeURIComponent(region)}`, undefined, signal),
+  getWorkBuddy: (variant, signal) =>
+    req('GET', `/panel/api/workbuddy?variant=${encodeURIComponent(variant)}`, undefined, signal),
+  getQoder: (variant, signal) =>
+    req('GET', `/panel/api/qoder?variant=${encodeURIComponent(variant)}`, undefined, signal),
   postTraeRefresh: (region) => req('POST', `/panel/api/trae/refresh?region=${encodeURIComponent(region)}`),
   postTraeCheckin: (region) => req('POST', `/panel/api/trae/checkin?region=${encodeURIComponent(region)}`),
   postTraeControl: (region, action) =>

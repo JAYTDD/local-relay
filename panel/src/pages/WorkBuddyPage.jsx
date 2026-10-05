@@ -17,7 +17,10 @@ const CATALOG_LABEL = { live: '实时拉取', saved: '上次保存的目录', fa
 
 /** WorkBuddy 通道页：额度、模型启停、推理探测 */
 export default function WorkBuddyPage({ variant, onVariant, onChannelChanged }) {
-  const { data, loading, error, reload } = useAsyncData(api.getWorkBuddy);
+  const { data, loading, error, reload } = useAsyncData(
+    (signal) => api.getWorkBuddy(variant, signal),
+    { cacheKey: `workbuddy:${variant}` },
+  );
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState(null);
 

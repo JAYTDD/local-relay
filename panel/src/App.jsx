@@ -56,6 +56,10 @@ export default function App() {
     return 'ok';
   };
 
+  // 区服/变体：既作页面 props，也作 key——换区服时页面重挂载，本地提示条与忙标记跟着清掉
+  const traeRegion = query.r === 'ai' ? 'ai' : 'cn';
+  const variant = query.r === 'global' ? 'global' : 'cn';
+
   return (
     <div className="app">
       <nav className="sidebar">
@@ -100,21 +104,24 @@ export default function App() {
         {route === 'overview' && <OverviewPage health={health} navigate={navigate} />}
         {route === 'trae' && (
           <TraePage
-            region={query.r === 'ai' ? 'ai' : 'cn'}
+            key={traeRegion}
+            region={traeRegion}
             onRegion={(r) => { replaceQuery({ r }); onChannelChanged(); }}
             onChannelChanged={onChannelChanged}
           />
         )}
         {route === 'workbuddy' && (
           <WorkBuddyPage
-            variant={query.r === 'global' ? 'global' : 'cn'}
+            key={variant}
+            variant={variant}
             onVariant={(r) => { replaceQuery({ r }); onChannelChanged(); }}
             onChannelChanged={onChannelChanged}
           />
         )}
         {route === 'qoder' && (
           <QoderPage
-            variant={query.r === 'global' ? 'global' : 'cn'}
+            key={variant}
+            variant={variant}
             onVariant={(r) => { replaceQuery({ r }); onChannelChanged(); }}
             onChannelChanged={onChannelChanged}
           />

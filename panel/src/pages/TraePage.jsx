@@ -14,7 +14,10 @@ const REGIONS = [
 
 /** Trae 通道页：登录态、账号切换、额度、签到、选集/预算、Raw Chat 诊断 */
 export default function TraePage({ region, onRegion, onChannelChanged }) {
-  const { data, loading, error, reload } = useAsyncData(api.getTrae);
+  const { data, loading, error, reload } = useAsyncData(
+    (signal) => api.getTrae(region, signal),
+    { cacheKey: `trae:${region}` },
+  );
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null); // {kind, text}
 
