@@ -378,9 +378,9 @@ export async function createQoderProvider(variantId) {
         nextRunAt: scheduler.nextRunAt(variantId),
       };
     },
-    /** 清空签到记录与日志（源 clear-checkin-logs 动作） */
+    /** 清空签到日志（源 clear-checkin-logs 动作；checkin 记录保留，见源 clearLogs） */
     clearCheckInLogs() {
-      checkInStore.patch({ checkin: undefined, logs: [] });
+      checkInStore.patch({ logs: [] });
       return { state: 'cleared' };
     },
     /** 自动签到开关 */
