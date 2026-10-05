@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useHashRoute } from './router.jsx';
 import { api } from './api.js';
-import { BriefcaseIcon, GaugeIcon, PlaneIcon, TerminalIcon } from './components/icons.jsx';
+import { BriefcaseIcon, GaugeIcon, PlaneIcon, ScrollTextIcon, TerminalIcon } from './components/icons.jsx';
 import { Notice } from './components/primitives.jsx';
 import OverviewPage from './pages/OverviewPage.jsx';
+import LogsPage from './pages/LogsPage.jsx';
 import TraePage from './pages/TraePage.jsx';
 import WorkBuddyPage from './pages/WorkBuddyPage.jsx';
 import QoderPage from './pages/QoderPage.jsx';
@@ -13,6 +14,7 @@ const NAV = [
   { key: 'trae', label: 'Trae', Icon: PlaneIcon, prefixes: ['trae', 'traeg'] },
   { key: 'workbuddy', label: 'WorkBuddy', Icon: BriefcaseIcon, prefixes: ['wb', 'wbai'] },
   { key: 'qoder', label: 'Qoder', Icon: TerminalIcon, prefixes: ['qoder', 'qoderg'] },
+  { key: 'logs', label: '日志', Icon: ScrollTextIcon },
 ];
 
 /**
@@ -88,6 +90,7 @@ export default function App() {
 
       <main className="content">
         {error && <Notice kind="err">网关健康度读取失败：{error}</Notice>}
+        {route === 'logs' && <LogsPage />}
         {route === 'overview' && <OverviewPage health={health} navigate={navigate} />}
         {route === 'trae' && (
           <TraePage
