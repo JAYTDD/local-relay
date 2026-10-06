@@ -63,6 +63,8 @@ flowchart LR
 
 所以这个项目做的事是：**给这些 shim 补上凭据、目录、偏好这三样外部注入，再把六个 shim 收进一个端口按前缀分发**——而不是从零逆向上游协议。
 
+> `shims/` 下的协议层来自这三个 MIT 许可的包：`dsh-connect-trae`、`dsh-workbuddy-connect`、`dsh-qoder-connect`，连同各自的版权声明一起保留。同一目录下的 `@deepseek-ai/*` 与 `@earendil-works/pi-ai` 不是第三方代码，而是为了能让插件在 DSH 之外被解析而**手写的最小桩**。详见[致谢](#致谢)。
+
 一条请求的完整路径：
 
 1. 客户端用 `通道/模型ID` 调 `/v1/chat/completions`；网关按前缀选 provider，校验模型 ID 真实存在（不存在就 404，不往上游打）。
@@ -277,6 +279,18 @@ npm run sync:deps -- --force   # 改了依赖桩之后必须重跑，否则读�
 
 改动生效方式：**后端改动要重启网关**；纯前端改动 `npm run build:panel` 后刷新浏览器即可。（`shims/node_modules/` 是入库的源——提取来的协议层与依赖桩，可 diff 审查；根 `node_modules/` 只是它的副本，由 `sync:deps` 重建，别手改。）
 
+## 致谢
+
+本项目能成立，靠的是这三个插件已经把协议层写好并公开：
+
+| 包 | 许可 | 在本项目里的角色 |
+|---|---|---|
+| [`dsh-connect-trae`](shims/node_modules/dsh-connect-trae) | MIT | Trae 的凭据发现/刷新、请求编码、SSE 解码与工具调用桥接、模型目录路由 |
+| [`dsh-workbuddy-connect`](shims/node_modules/dsh-workbuddy-connect) | MIT | WorkBuddy 的凭据存储与 at-rest 解密、目录与可见性、推理探针 |
+| [`dsh-qoder-connect`](shims/node_modules/dsh-qoder-connect) | MIT | Qoder 的 PAT 校验与传输、账号/额度读取、签到 |
+
+它们的代码与版权声明一并保留在仓库的 `shims/` 下（未做改动，仅做装配）。`shims/node_modules/@deepseek-ai/*` 与 `@earendil-works/pi-ai` 是本项目手写的 DSH 运行时桩，只为让上述包能在 DSH 进程外被解析，不属于第三方代码。
+
 ## 许可
 
-MIT。使用前请阅读上方的[安全与免责](#安全与免责)。
+[MIT](LICENSE) © 2026 lunesnow。使用前请阅读上方的[安全与免责](#安全与免责)。`shims/` 下的第三方代码仍归各自作者所有，按其原有许可（均为 MIT）分发。
