@@ -1,0 +1,9 @@
+# 行尾策略：仓库里一律 LF（Windows 检出时由 core.autocrlf 决定工作区表现），
+# 只有 Windows 批处理需要 CRLF —— cmd.exe 读 LF-only 的 .cmd 在带标签/跳转时会出错。
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# shims/ 是原样入库的第三方协议层（MIT），字节应与你拿到的上游产物一致，
+# 因此禁止任何行尾规范化改写它，否则 diff 会污染成"全文件改动"。
+shims/** -text

@@ -17,18 +17,18 @@ function traeProvider(region, models, store) {
 }
 
 /** 已登录的 store 桩 */
-function signedInStore(accountName = '用户1824357819') {
+function signedInStore(accountName = '示例账号') {
   const account = {
     id: 'acct-1',
     accountName,
     edition: 'cn',
     region: 'cn',
     source: 'desktop',
-    tokenExpiresAtMs: 1792124634350,
+    tokenExpiresAtMs: 1800000000000,
     selected: true,
   };
   return {
-    status: async () => ({ state: 'signed-in', edition: 'cn', expiresAtMs: 1792124634350, source: 'desktop' }),
+    status: async () => ({ state: 'signed-in', edition: 'cn', expiresAtMs: 1800000000000, source: 'desktop' }),
     accounts: async () => [account],
   };
 }
@@ -60,8 +60,8 @@ test('document reports signed-in with real account from store', async () => {
   });
   const doc = await st.document('cn');
   assert.equal(doc.status, 'signed-in');
-  assert.equal(doc.accountName, '用户1824357819');
-  assert.equal(doc.tokenExpiresAtMs, 1792124634350);
+  assert.equal(doc.accountName, '示例账号');
+  assert.equal(doc.tokenExpiresAtMs, 1800000000000);
   assert.equal(doc.accounts.length, 1);
   assert.equal(doc.models.length, 1);
   assert.equal(doc.models[0].id, 'glm-5.3');

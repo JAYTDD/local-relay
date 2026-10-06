@@ -9,6 +9,14 @@
 # 运行时与本地临时文件
 *.log
 .DS_Store
+Thumbs.db
+
+# 本地私有的环境变量与编辑器目录
+.env
+.env.*
+*.local
+.idea/
+.vscode/
 
 # 本地排查残留：ACL 诊断报告与一次性探针脚本
 /.dsh-acl-report/
