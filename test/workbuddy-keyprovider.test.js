@@ -36,3 +36,32 @@ test('每个变体独立的 keyProvider 实例（各自缓存 key，互不串）
   await cn.close();
   await ai.close();
 });
+
+// 显式路径失效的回归守卫：插件对显式路径"只信不退回"，变量指向不存在的
+// 文件会让整条通道直接失效（CN 客户端升级换目录后踩过，见 dropStaleElectronBin）。
+test('指向不存在文件的 ELECTRON_BIN 被丢弃，让插件自己的发现逻辑接手', async () => {
+  const { dropStaleElectronBin } = await import('../src/providers/workbuddy.mjs');
+  const VAR = 'WORKBUDDY_ELECTRON_BIN_TEST';
+  const original = process.env[VAR];
+  try {
+    // 未设置：不动，不报
+    delete process.env[VAR];
+    assert.equal(dropStaleElectronBin(VAR), undefined);
+    assert.equal(process.env[VAR], undefined);
+
+    // 路径有效：原样保留（当前文件系统里确定存在的文件）
+    const real = new URL('../package.json', import.meta.url).pathname;
+    process.env[VAR] = process.platform === 'win32' ? real.replace(/^\//, '') : real;
+    assert.equal(dropStaleElectronBin(VAR), undefined);
+    assert.notEqual(process.env[VAR], undefined, '有效路径不该被丢掉');
+
+    // 路径失效（客户端换安装目录的典型情形）：丢掉变量并返回旧值
+    const stale = process.platform === 'win32' ? 'D:\\gone\\WorkBuddy.exe' : '/gone/WorkBuddy';
+    process.env[VAR] = stale;
+    assert.equal(dropStaleElectronBin(VAR), stale);
+    assert.equal(process.env[VAR], undefined, '失效路径必须被丢掉，否则通道永久不可用');
+  } finally {
+    if (original === undefined) delete process.env[VAR];
+    else process.env[VAR] = original;
+  }
+});

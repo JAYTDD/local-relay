@@ -91,12 +91,51 @@ function accountKeyFromCredential(credential) {
 }
 
 /**
+ * 清掉指向不存在文件的 WORKBUDDY(_AI)_ELECTRON_BIN。
+ *
+ * 插件对**显式配置的路径是"只信不退回"**的（resolveElectronPath 的注释：
+ * "an explicit path is used as-is and never falls back"）：变量设了但那个文件不
+ * 在，就直接抛 electron-path-invalid，连它自己的注册表/默认路径发现都不走。
+ * 于是"配错一个变量"比"什么都不配"更糟——整条通道静默失效。
+ *
+ * 实测踩过这条：CN 客户端从 5.3.8 升到 5.6 时安装目录由 `D:\WorkBuddy` 换成了
+ * `D:\workbuddyAI`，而这个变量还指着老路径，国内版从此全挂；更难受的是报错里
+ * 提到的变量在注册表、shell profile、DSH 配置里都搜不到（是在某个控制台会话里
+ * 临时设的），只能顺着错误信息一路翻。
+ *
+ * 所以在装配前做一次卫生检查：路径不存在就丢掉变量并明确告警，让插件的发现
+ * 逻辑接手。只动本进程的环境，不改用户的运行环境。
+ *
+ * @returns {string|undefined} 被丢弃的那条失效路径（供调用方/测试观察）
+ */
+export function dropStaleElectronBin(envVar) {
+  const configured = process.env[envVar]?.trim();
+  if (configured === undefined || configured === '') return undefined;
+  let usable = false;
+  try {
+    usable = fs.statSync(configured).isFile();
+  } catch {
+    usable = false;
+  }
+  if (usable) return undefined;
+  delete process.env[envVar];
+  logger.warn(
+    `${envVar} 指向的路径不存在（${configured}），已忽略该设置、改用插件自身的发现逻辑；` +
+      '客户端确实装在别处的话，请更新或删除这个环境变量',
+  );
+  return configured;
+}
+
+/**
  * @param {'cn'|'global'} variantId
  */
 export async function createWorkBuddyProvider(variantId) {
   const variant = variantId === 'global' ? wb.AI_VARIANT : wb.CN_VARIANT;
   const fallback = variantId === 'global' ? wb.FALLBACK_WORKBUDDY_AI_MODELS : wb.FALLBACK_WORKBUDDY_MODELS;
   const prefs = createChannelPrefs({ channel: 'workbuddy', variant: variantId });
+
+  // 失效的显式路径会让整条通道失效（见 dropStaleElectronBin 的说明）
+  dropStaleElectronBin(variant.electron?.envVar);
 
   // 原插件 apply() 同款（index.js:2094）：keyProvider 对两个变体都传。
   const atRestKeyProviderFor = await loadKeyProviderFactory();
